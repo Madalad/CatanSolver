@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "catansolver"
+version = "0.0.1"
+description = "A solver/advisor for Colonist.io 1v1 Settlers of Catan."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "catanatron>=3.2.1",
+    "pydantic>=2",
+    "numpy",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+# Added in later phases: fastapi, uvicorn (API); torch, stable-baselines3 (Tier 3).
+
+[tool.setuptools.packages.find]
+include = ["catansolver*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
