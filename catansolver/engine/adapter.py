@@ -70,6 +70,41 @@ def canonical_port_slots() -> List[NodePair]:
     return [_port_trading_nodes(cmap.ports_by_id[pid]) for pid in sorted(cmap.ports_by_id)]
 
 
+RED_NUMBERS = frozenset({6, 8})
+
+
+@functools.lru_cache(maxsize=1)
+def canonical_hex_adjacency() -> Dict[int, frozenset]:
+    """hex id -> frozenset of *edge-adjacent* hex ids (those sharing a full edge,
+    i.e. >= 2 nodes). Fixed by the board topology."""
+    cmap = _canonical_map()
+    nodes_by_tile = {t.id: set(t.nodes.values()) for t in cmap.tiles_by_id.values()}
+    ids = sorted(nodes_by_tile)
+    adj: Dict[int, set] = {tid: set() for tid in ids}
+    for i, a in enumerate(ids):
+        for b in ids[i + 1:]:
+            if len(nodes_by_tile[a] & nodes_by_tile[b]) >= 2:
+                adj[a].add(b)
+                adj[b].add(a)
+    return {tid: frozenset(neighbors) for tid, neighbors in adj.items()}
+
+
+def adjacent_red_pairs(board: BoardState) -> List[Tuple[int, int]]:
+    """Pairs of edge-adjacent hexes that both carry a red number (6 or 8).
+
+    Official Catan setup forbids adjacent red numbers; an empty result means the
+    board satisfies that rule.
+    """
+    number = {h.id: h.number for h in board.hexes}
+    adjacency = canonical_hex_adjacency()
+    return [
+        (a, b)
+        for a in sorted(adjacency)
+        for b in adjacency[a]
+        if a < b and number.get(a) in RED_NUMBERS and number.get(b) in RED_NUMBERS
+    ]
+
+
 # --------------------------------------------------------------------------- #
 # Resource <-> string helpers (Catanatron uses None for desert / 3:1 port).
 # --------------------------------------------------------------------------- #

@@ -2,7 +2,7 @@
 
 A solver/advisor for **Colonist.io 1v1** Settlers of Catan: given a game state, it computes the move(s) that maximise your probability of winning. See **[plan.md](plan.md)** for the full spec/roadmap and **[docs/phase0-findings.md](docs/phase0-findings.md)** for the Phase-0 decision memo.
 
-**Status:** Phase 0 complete (foundations + engine choice). The engine extends [Catanatron](https://github.com/bcollazo/catanatron) (MIT).
+**Status:** Phases 0–2.5 complete — engine + 1v1 rules, opening-placement optimizer, interactive board UI (Advisor), and an opening **practice/drill** mode. The engine extends [Catanatron](https://github.com/bcollazo/catanatron) (MIT).
 
 ## Setup (Windows + Anaconda)
 
@@ -25,8 +25,19 @@ Or just dot-source **`scripts/dev-shell.ps1`**, which sets PATH and activates th
 
 ## Run the tests
 ```powershell
+. .\scripts\dev-shell.ps1   # puts Anaconda's OpenSSL on PATH (the web deps import ssl)
 .\.venv\Scripts\python.exe -m pytest -q
 ```
+
+## Run the UI
+```powershell
+. .\scripts\dev-shell.ps1
+.\.venv\Scripts\python.exe -m uvicorn catansolver.api.app:app --reload
+```
+Open <http://127.0.0.1:8000/>. Two tabs:
+
+- **Advisor** — the board starts empty; fill it either by **clicking a hex** (a menu sets its resource + number) or by **selecting a paint** and clicking hexes to fill them fast (or hit **Random Board**). Choose your seat, place any existing draft pieces, then click **Analyze** (the **ⓘ** explains the options). Set "Rollouts/candidate" > 0 for Monte-Carlo win probabilities (slower).
+- **Practice** — pick a scenario from the chooser (or random), place your own settlement(s)+road(s) on a generated puzzle (click a piece again to remove it), then **Submit** to see how close to optimal you were, the model move on the board, and a running score/streak (saved in your browser). Each puzzle is scored out of **10** by answer quality (settlements weighted double roads); only a truly optimal answer is "Perfect". Spots are named by their hex numbers (e.g. `5-8-11`) and roads by direction (L/R/U/D).
 
 ## Layout
 ```

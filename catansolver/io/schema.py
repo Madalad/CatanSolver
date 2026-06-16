@@ -261,3 +261,73 @@ class OpeningPlacementRequest(BaseModel):
                 f"board, found {placed}"
             )
         return self
+
+
+# --------------------------------------------------------------------------- #
+# Solver output
+# --------------------------------------------------------------------------- #
+class Placement(BaseModel):
+    """A single settlement + its initial road."""
+
+    settlement: int  # node id
+    road: Edge
+
+
+class Recommendation(BaseModel):
+    """A ranked opening recommendation (solver output / API response).
+
+    ``placements`` holds one entry for the FIRST / FIRST_FINAL seats and two for
+    SECOND (the second player commits both settlements at once).
+    """
+
+    placements: List[Placement]
+    heuristic_score: float
+    win_prob: Optional[float] = None  # Monte-Carlo estimate; None if rollouts disabled
+    ci_low: Optional[float] = None  # Wilson 95% interval
+    ci_high: Optional[float] = None
+    rollouts: int = 0
+
+
+# --------------------------------------------------------------------------- #
+# Practice mode (Phase 2.5) — grading output
+# --------------------------------------------------------------------------- #
+class UnitGrade(BaseModel):
+    """Grade for one settlement or one road the user placed in practice mode.
+
+    ``kind`` selects which of the node/edge fields are populated. Scores are
+    heuristic values; ``pct_of_best`` and ``rank`` express "by how much" the
+    choice trailed the optimum, and ``correct`` reflects the tolerance band.
+    """
+
+    kind: str  # "settlement" | "road"
+    placement_index: int  # 0 for FIRST/FIRST_FINAL; 0 or 1 for the SECOND seat's pair
+    chosen_node: Optional[int] = None
+    optimal_node: Optional[int] = None
+    chosen_edge: Optional[Edge] = None
+    optimal_edge: Optional[Edge] = None
+    chosen_score: float
+    optimal_score: float
+    pct_of_best: float  # chosen / optimal * 100
+    quality: float  # 0..1, normalised over the legal spread (worst..best); drives points
+    points: float  # this unit's contribution to the 10-point puzzle score
+    rank: int  # 1-based rank of the choice among the legal options
+    n_options: int
+    is_optimal: bool  # the choice is (tied) best — rank 1
+    correct: bool  # within the tolerance band
+
+
+class PracticeResult(BaseModel):
+    """Full feedback for a graded practice attempt.
+
+    Points are continuous: a perfect answer scores ``total_max`` (10.0); anything
+    else scores a fraction reflecting how close to optimal it was (heuristic).
+    """
+
+    seat: DraftSeat
+    grades: List[UnitGrade]
+    total_awarded: float  # 0..10
+    total_max: float  # 10.0
+    is_optimal: bool  # every piece was an optimal choice (drives the "Perfect" verdict)
+    all_correct: bool  # every piece was within the tolerance band (drives the streak)
+    optimal_placements: List[Placement]  # the model line, for drawing on the board
+    ranking: List[Recommendation]  # the solver's top recommendations (deeper context)

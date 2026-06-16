@@ -12,13 +12,15 @@ from catanatron import Color, RandomPlayer
 from catanatron.models.map import BASE_MAP_TEMPLATE, CatanMap
 
 from catansolver.engine.adapter import (
+    adjacent_red_pairs,
     board_from_game,
+    canonical_hex_adjacency,
     canonical_port_slots,
     game_from_board,
     map_to_schema,
     schema_to_map,
 )
-from catansolver.io.schema import BoardState
+from catansolver.io.schema import BoardState, HexResource
 
 SEEDS = [0, 1, 2, 7, 42, 123, 999]
 
@@ -76,3 +78,30 @@ def test_game_from_board_preserves_board_and_is_playable():
         if game.winning_color() is not None:
             break
         game.play_tick()
+
+
+def test_hex_adjacency_is_symmetric_and_sized():
+    adj = canonical_hex_adjacency()
+    assert len(adj) == 19
+    for a, neighbors in adj.items():
+        assert 2 <= len(neighbors) <= 6
+        for b in neighbors:
+            assert a in adj[b]  # symmetric
+    assert len(adj[0]) == 6  # the centre hex touches six others
+
+
+def test_adjacent_red_pairs_detection():
+    board = map_to_schema(_base_map(0))
+    for h in board.hexes:
+        if h.resource != HexResource.DESERT:
+            h.number = 4  # clear all red numbers
+    assert adjacent_red_pairs(board) == []
+
+    adj = canonical_hex_adjacency()
+    non_desert = {h.id for h in board.hexes if h.resource != HexResource.DESERT}
+    a, b = next(
+        (x, y) for x in sorted(adj) for y in adj[x] if x < y and x in non_desert and y in non_desert
+    )
+    by_id = {h.id: h for h in board.hexes}
+    by_id[a].number, by_id[b].number = 6, 8
+    assert adjacent_red_pairs(board) == [(a, b)]

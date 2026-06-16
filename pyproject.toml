@@ -12,11 +12,13 @@ dependencies = [
     "catanatron>=3.2.1",
     "pydantic>=2",
     "numpy",
+    "fastapi",
+    "uvicorn",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
-# Added in later phases: fastapi, uvicorn (API); torch, stable-baselines3 (Tier 3).
+dev = ["pytest>=8", "httpx"]
+# Added in later phases: torch, stable-baselines3 (Tier 3).
 
 [tool.setuptools.packages.find]
 include = ["catansolver*"]
