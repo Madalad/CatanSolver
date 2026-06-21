@@ -1,0 +1,32 @@
+{
+  "FIRST": {
+    "a": -1.6015,
+    "b": 5.7759,
+    "n_obs": 400,
+    "heuristic_range": [
+      0.0,
+      0.58
+    ],
+    "p50_heuristic": 0.277
+  },
+  "FIRST_FINAL": {
+    "a": -1.5795,
+    "b": 5.317,
+    "n_obs": 220,
+    "heuristic_range": [
+      0.0,
+      0.613
+    ],
+    "p50_heuristic": 0.297
+  },
+  "SECOND": {
+    "a": -3.7082,
+    "b": 5.7587,
+    "n_obs": 220,
+    "heuristic_range": [
+      0.118,
+      1.333
+    ],
+    "p50_heuristic": 0.644
+  }
+}

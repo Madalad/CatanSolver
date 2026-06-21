@@ -17,7 +17,7 @@ from catanatron import Action, ActionType
 from catansolver.engine.config import COLONIST_1V1, RulesConfig
 from catansolver.io.schema import OpeningPlacementRequest
 
-from .draft import PolicyFactory, _pick_road, default_policy, drive_to_user_decision
+from .draft import PolicyFactory, _pick_road, drive_to_user_decision, rollout_policy
 
 Edge = Tuple[int, int]
 Z_95 = 1.96
@@ -46,7 +46,7 @@ def estimate_win_prob(
     request: OpeningPlacementRequest,
     user_placements: List[Tuple[int, Edge]],
     n_rollouts: int,
-    policy: PolicyFactory = default_policy,
+    policy: PolicyFactory = rollout_policy,
     rules: RulesConfig = COLONIST_1V1,
     seed_base: int = 0,
 ) -> WinEstimate:

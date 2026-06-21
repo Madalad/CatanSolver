@@ -1,0 +1,7 @@
+advisor: PIMC (2 det x 25 iters), rollout_depth=10, workers=6
+40 games/matchup, alternating seat+colour, vps_to_win=15
+
+opponent                      advisor W-L-D     win%  95% CI        sig?
+RandomPlayer                  34-6-0             85  [  71-  93]   YES (268s)
+WeightedRandom (heuristic)    35-5-0             88  [  74-  95]   YES (245s)
+VictoryPointPlayer (search)   31-9-0             78  [  62-  88]   YES (338s)

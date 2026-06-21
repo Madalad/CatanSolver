@@ -1,0 +1,45 @@
+{
+  "boards": 40,
+  "candidates_per_board": 10,
+  "rollouts": 200,
+  "observations": 400,
+  "runtime_min": 96.1,
+  "pooled_pearson": 0.885,
+  "pooled_pearson_ci": [
+    0.862,
+    0.905
+  ],
+  "pooled_spearman": 0.882,
+  "within_board_spearman_mean": 0.879,
+  "within_board_spearman_std": 0.097,
+  "top1_hit_rate": 0.75,
+  "top1_regret_mean": 0.014,
+  "top1_regret_max": 0.16,
+  "buckets_heur_vs_winprob": [
+    [
+      0.091,
+      0.249,
+      80
+    ],
+    [
+      0.183,
+      0.369,
+      80
+    ],
+    [
+      0.253,
+      0.475,
+      80
+    ],
+    [
+      0.333,
+      0.589,
+      80
+    ],
+    [
+      0.47,
+      0.735,
+      80
+    ]
+  ]
+}

@@ -23,6 +23,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 from catanatron import Action, ActionType, Color
 from catanatron.models.enums import ActionPrompt
 from catanatron.players.search import VictoryPointPlayer
+from catanatron.players.weighted_random import WeightedRandomPlayer
 
 from catansolver.engine import game_from_board
 from catansolver.engine.config import COLONIST_1V1, RulesConfig
@@ -35,9 +36,17 @@ _MAX_DRAFT_PLIES = 16  # safety: a 2-player draft is 8 plies
 
 
 def default_policy(color: Color):
-    """Greedy victory-point rollout policy: stronger than random and terminates
-    quickly. The plan upgrades this to a tuned heuristic / learned policy later."""
+    """Greedy victory-point policy: used to generate plausible opponent priors for
+    practice puzzles (a competent opening), where speed is not critical."""
     return VictoryPointPlayer(color)
+
+
+def rollout_policy(color: Color):
+    """Fast, even-strength baseline for Monte-Carlo rollouts: ~7x quicker than the
+    search player (so the win-% mode is usable) and the opponent the win-prob model
+    is calibrated against. Both players use it, so win-rates are "vs an even
+    baseline" — see docs/heuristic-accuracy.md."""
+    return WeightedRandomPlayer(color)
 
 
 def _pick_road(game, desired: Optional[Edge]) -> Action:

@@ -1,0 +1,17 @@
+=== PIMC ===
+advisor: PIMC (2 det x 25 iters), rollout_depth=10, workers=6
+40 games/matchup, alternating seat+colour, vps_to_win=15
+
+opponent                      advisor W-L-D     win%  95% CI        sig?
+RandomPlayer                  33-7-0             82  [  68-  91]   YES (211s)
+WeightedRandom (heuristic)    32-8-0             80  [  65-  90]   YES (216s)
+VictoryPointPlayer (search)   30-10-0            75  [  60-  86]   YES (288s)
+
+=== ISMCTS ===
+advisor: ISMCTS (50 iters), rollout_depth=10, workers=6
+40 games/matchup, alternating seat+colour, vps_to_win=15
+
+opponent                      advisor W-L-D     win%  95% CI        sig?
+RandomPlayer                  32-8-0             80  [  65-  90]   YES (401s)
+WeightedRandom (heuristic)    33-7-0             82  [  68-  91]   YES (258s)
+VictoryPointPlayer (search)   30-10-0            75  [  60-  86]   YES (273s)

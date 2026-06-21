@@ -1,0 +1,15 @@
+round-robin: 30 games/pair, workers=6, advisor=2x25 depth=10
+took 630s
+
+rank  entrant              Elo  W-L-D         win%  95% CI
+ 1.  Advisor(PIMC)       1701  74-16-0        82  [ 73- 89]
+ 2.  WeightedRandom      1464  38-48-4        44  [ 35- 55]
+ 3.  VictoryPoint        1454  37-50-3        43  [ 33- 53]
+ 4.  Random              1381  25-60-5        31  [ 22- 41]
+
+pairwise (row's wins vs column):
+                 Advisor(PI WeightedRa VictoryPoi     Random
+Advisor(PIMC)             -         23         25         26
+WeightedRandom            7          -         13         18
+VictoryPoint              5         16          -         16
+Random                    4          9         12          -

@@ -1,0 +1,23 @@
+{
+  "FIRST": {
+    "a": -1.6486,
+    "b": 5.9866,
+    "n_obs": 300,
+    "p50_heuristic": 0.275,
+    "mean_winprob": 0.483
+  },
+  "FIRST_FINAL": {
+    "a": -1.5257,
+    "b": 4.9345,
+    "n_obs": 200,
+    "p50_heuristic": 0.309,
+    "mean_winprob": 0.446
+  },
+  "SECOND": {
+    "a": -3.6415,
+    "b": 5.741,
+    "n_obs": 200,
+    "p50_heuristic": 0.634,
+    "mean_winprob": 0.555
+  }
+}

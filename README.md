@@ -36,7 +36,7 @@ Or just dot-source **`scripts/dev-shell.ps1`**, which sets PATH and activates th
 ```
 Open <http://127.0.0.1:8000/>. Two tabs:
 
-- **Advisor** — the board starts empty; fill it either by **clicking a hex** (a menu sets its resource + number) or by **selecting a paint** and clicking hexes to fill them fast (or hit **Random Board**). Choose your seat, place any existing draft pieces, then click **Analyze** (the **ⓘ** explains the options). Set "Rollouts/candidate" > 0 for Monte-Carlo win probabilities (slower).
+- **Advisor** — the board starts empty; fill it either by **clicking a hex** (a menu sets its resource + number) or by **selecting a paint** and clicking hexes to fill them fast (or hit **Random Board**). Choose your seat, place any existing draft pieces, then click **Analyze** (the **ⓘ** explains it). Each spot shows a **strength score** (higher = better), and the best are highlighted on the board. (A win-% display was trialled but shelved — the only available bots are too weak to give a believable probability; see [docs/heuristic-accuracy.md](docs/heuristic-accuracy.md). It'll return with the Tier-2/3 bot.)
 - **Practice** — pick a scenario from the chooser (or random), place your own settlement(s)+road(s) on a generated puzzle (click a piece again to remove it), then **Submit** to see how close to optimal you were, the model move on the board, and a running score/streak (saved in your browser). Each puzzle is scored out of **10** by answer quality (settlements weighted double roads); only a truly optimal answer is "Perfect". Spots are named by their hex numbers (e.g. `5-8-11`) and roads by direction (L/R/U/D).
 
 ## Layout

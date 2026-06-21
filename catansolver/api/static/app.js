@@ -529,7 +529,7 @@ async function analyze() {
     const body = {
       request: buildRequest(),
       top_k: 6,
-      n_rollouts: parseInt($("rollouts").value) || 0,
+      n_rollouts: 0, // win-% display shelved; rank by heuristic only (see docs/heuristic-accuracy.md)
     };
     const resp = await fetch("/api/recommend", {
       method: "POST",
@@ -557,15 +557,21 @@ function renderResults() {
   recs.forEach((r, i) => {
     const row = document.createElement("div");
     row.className = "rec" + (r === selected ? " sel" : "");
-    const spots = r.placements.map((p) => `S${p.settlement}→R(${p.road.join(",")})`).join("  +  ");
-    const sc =
-      r.win_prob == null
-        ? `heuristic ${r.heuristic_score.toFixed(2)}`
-        : `win ${(r.win_prob * 100).toFixed(0)}% [${(r.ci_low * 100).toFixed(0)}–${(r.ci_high * 100).toFixed(0)}]`;
-    row.innerHTML = `<b>#${i + 1}</b> ${spots}<br><span style="color:#8aa0b3">${sc}</span>`;
+    const spots = r.placements
+      .map((p) => `${spotName(p.settlement)} (${roadDir(p.settlement, p.road)})`)
+      .join("  +  ");
+    row.innerHTML = `<b>#${i + 1}</b> ${spots}<br><span style="color:#8aa0b3" title="${SCORE_HINT}">${scoreLabel(r)}</span>`;
     row.onclick = () => { selected = r; render(); renderResults(); };
     div.appendChild(row);
   });
+}
+
+// Recommendations are ranked by the heuristic score (higher = better). A win-%
+// display was trialled but shelved — vs the only available (weak) bot it read ~96%
+// where strong humans win ~44%, which would mislead. See docs/heuristic-accuracy.md.
+const SCORE_HINT = "Relative strength score (higher = better) — production-weighted, with diversity and ports. A comparative ranking, not a win probability.";
+function scoreLabel(r) {
+  return `score ${r.heuristic_score.toFixed(2)}`;
 }
 
 // --------------------------------------------------------------------------- //
@@ -740,13 +746,14 @@ function renderFeedback() {
     const spots = rec.placements
       .map((p) => `${spotName(p.settlement)} (${roadDir(p.settlement, p.road)})`)
       .join("  +  ");
-    row.innerHTML = `<b>#${i + 1}</b> ${spots}<br><span style="color:#8aa0b3">heuristic ${rec.heuristic_score.toFixed(2)}</span>`;
+    row.innerHTML = `<b>#${i + 1}</b> ${spots}<br><span style="color:#8aa0b3" title="${SCORE_HINT}">${scoreLabel(rec)}</span>`;
     row.onclick = () => { practiceSel = rec; render(); renderFeedback(); };
     div.appendChild(row);
   });
   const legend = document.createElement("p");
   legend.className = "hint";
-  legend.innerHTML = "Gold ★ = model answer · cyan = a pick you clicked · ring = your spot (green ok / orange off).";
+  legend.innerHTML = "Gold ★ = model answer · cyan = a pick you clicked · ring = your spot (green ok / orange off)."
+    + "<br>Spots read as <b>numbers-of-adjacent-hexes (road direction)</b>, e.g. 5-6-9 (L).";
   div.appendChild(legend);
 }
 

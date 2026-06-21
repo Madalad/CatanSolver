@@ -89,8 +89,7 @@
     </select>
     <p class="hint" id="placeHint"></p>
     <h3>Analyze <button id="analyzeInfo" class="infobtn" title="How does Analyze work?">i</button></h3>
-    <label>Rollouts/candidate: <input id="rollouts" type="number" value="0" min="0" max="200" style="width:64px"></label>
-    <p class="hint">0 = instant heuristic ranking; &gt;0 runs Monte-Carlo simulations (win %, slower).</p>
+    <p class="hint">Ranks every legal spot by a strength score (higher = better) and highlights the best on the board.</p>
     <div><button id="analyze" class="primary">Analyze ▶</button></div>
     <p class="status" id="status"></p>
   </div>
@@ -151,10 +150,9 @@
   <div class="modal-card">
     <h2>How “Analyze” works</h2>
     <div class="info-body">
-      <p>You give the solver a <b>board</b> and your <b>draft situation</b> (going first, going second, or your final first-pick). It then figures out the best place(s) to drop your opening settlement + road.</p>
-      <p><b>Rollouts = 0 (instant):</b> every legal spot is scored with a quick rule-of-thumb — how many resources it produces (weighted toward wheat &amp; ore), how varied they are, and whether it touches a useful port. Spots are ranked best-first.</p>
-      <p><b>Rollouts &gt; 0 (slower):</b> for the top spots, the solver actually <b>plays out that many full games</b> from each option against an automated opponent and reports how often you won — a real <b>win&nbsp;%</b>, with a ± range showing how sure it is. More rollouts = a more reliable number but more waiting.</p>
-      <p>Results are listed and drawn on the board; click one to highlight it. The win&nbsp;% assumes an evenly-matched opponent, so treat it as guidance, not gospel.</p>
+      <p>You give the solver a <b>board</b> and your <b>draft situation</b> (going first, going second, or your final first-pick). It then ranks every legal opening and highlights the best place(s) to drop your settlement + road.</p>
+      <p>Each spot gets a <b>strength score</b> — higher is better. It rewards how many resources the spot produces (weighted toward <b>wheat &amp; ore</b> for the 15-point game), how <b>varied</b> those resources are, and whether it touches a useful <b>port</b>. The top score is the recommended pick.</p>
+      <p>The score is a <b>comparative ranking, not a win probability</b>. We measured it against Monte-Carlo simulations and it tracks the true ranking of spots well — but turning it into a believable win&nbsp;% needs a strong opponent to play against, which we don't have yet (the only available bots are far below human level). So we show the score, and a calibrated win&nbsp;% will follow once the solver has its own strong bot.</p>
     </div>
     <div class="modal-actions"><button id="infoClose" class="primary">Got it</button></div>
   </div>

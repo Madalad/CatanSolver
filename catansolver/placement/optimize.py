@@ -24,9 +24,10 @@ from catansolver.io.schema import (
     Recommendation,
 )
 
-from .draft import PolicyFactory, _pick_road, default_policy, drive_to_user_decision
+from .draft import PolicyFactory, _pick_road, drive_to_user_decision, rollout_policy
 from .heuristic import best_initial_road, node_score, pair_score
 from .rollout import WinEstimate, estimate_win_prob
+from .winprob_model import win_prob_estimate
 
 Edge = Tuple[int, int]
 
@@ -36,7 +37,7 @@ def recommend_opening(
     *,
     top_k: int = 8,
     n_rollouts: int = 50,
-    policy: PolicyFactory = default_policy,
+    policy: PolicyFactory = rollout_policy,
     rules: RulesConfig = COLONIST_1V1,
     pair_top_first: int = 12,
     pair_top_second: int = 4,
@@ -45,17 +46,23 @@ def recommend_opening(
 
     With ``n_rollouts > 0`` results are ranked by Monte-Carlo win probability
     (heuristic breaks ties); with ``n_rollouts == 0`` it is a fast heuristic-only
-    ranking. ``pair_top_*`` bound the SECOND-seat pair search.
+    ranking. Every recommendation also carries an instant ``model_win_prob``
+    (logistic estimate from the heuristic). ``pair_top_*`` bound the SECOND search.
     """
     catan_map = schema_to_map(request.board)
     node_scores: Dict[int, float] = {n: node_score(catan_map, n) for n in catan_map.land_nodes}
 
     if request.seat == DraftSeat.SECOND:
-        return _recommend_pair(
+        recs = _recommend_pair(
             request, catan_map, node_scores, top_k, n_rollouts, policy, rules,
             pair_top_first, pair_top_second,
         )
-    return _recommend_single(request, catan_map, node_scores, top_k, n_rollouts, policy, rules)
+    else:
+        recs = _recommend_single(request, catan_map, node_scores, top_k, n_rollouts, policy, rules)
+
+    for r in recs:
+        r.model_win_prob = win_prob_estimate(request.seat, r.heuristic_score)
+    return recs
 
 
 def _legal_settlements(game) -> List[int]:

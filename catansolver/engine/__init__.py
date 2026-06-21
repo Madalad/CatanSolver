@@ -9,6 +9,7 @@ from .adapter import board_from_game, game_from_board, map_to_schema, schema_to_
 from .config import COLONIST_1V1, RulesConfig
 from .friendly_robber import patch_friendly_robber, unpatch_friendly_robber
 from .game import new_1v1_game
+from .state_adapter import game_from_state, game_to_state
 
 __all__ = [
     "RulesConfig",
@@ -20,4 +21,6 @@ __all__ = [
     "schema_to_map",
     "game_from_board",
     "board_from_game",
+    "game_from_state",
+    "game_to_state",
 ]

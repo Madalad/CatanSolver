@@ -23,3 +23,5 @@ Thumbs.db
 
 # Generated solver artifacts (board renders, simulation output)
 out/
+
+boot.txt

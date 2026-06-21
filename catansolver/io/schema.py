@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from collections import Counter
 from enum import Enum
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -187,6 +187,13 @@ class PlayerState(BaseModel):
     hand: Hand = Field(default_factory=Hand)
     dev_cards: DevCards = Field(default_factory=DevCards)
     played_knights: int = Field(default=0, ge=0)
+    # Other played dev cards. These have no lasting *rules* effect (only knights drive
+    # Largest Army), so they aren't needed to reconstruct a playable position — but
+    # they are public and remove cards from the deck, so tracking them lets the
+    # belief layer (catansolver/beliefs) model the remaining deck exactly.
+    played_monopoly: int = Field(default=0, ge=0)
+    played_year_of_plenty: int = Field(default=0, ge=0)
+    played_road_building: int = Field(default=0, ge=0)
     settlements: List[int] = Field(default_factory=list)  # node ids
     cities: List[int] = Field(default_factory=list)  # node ids
     roads: List[Edge] = Field(default_factory=list)
@@ -210,6 +217,8 @@ class GameState(BaseModel):
     current_player: str
     phase: Phase = Phase.PLAY
     dice: Optional[Tuple[int, int]] = None
+    has_rolled: bool = False  # current player has rolled this turn (post-roll decision)
+    prompt: str = "PLAY_TURN"  # within-PLAY sub-prompt: PLAY_TURN / MOVE_ROBBER / DISCARD
     # ruleset (mirrors RulesConfig; lets a state be self-describing)
     vps_to_win: int = 15
     discard_limit: int = 9
@@ -282,6 +291,7 @@ class Recommendation(BaseModel):
 
     placements: List[Placement]
     heuristic_score: float
+    model_win_prob: Optional[float] = None  # instant logistic estimate from the heuristic
     win_prob: Optional[float] = None  # Monte-Carlo estimate; None if rollouts disabled
     ci_low: Optional[float] = None  # Wilson 95% interval
     ci_high: Optional[float] = None
@@ -314,6 +324,23 @@ class UnitGrade(BaseModel):
     n_options: int
     is_optimal: bool  # the choice is (tied) best — rank 1
     correct: bool  # within the tolerance band
+
+
+class ActionRecommendation(BaseModel):
+    """A ranked action from the Tier-2 turn advisor.
+
+    ``win_prob`` is the Monte-Carlo win rate after taking this action, vs the
+    baseline rollout opponent (the same relative caveat as the opening win-%, see
+    docs/heuristic-accuracy.md). ``action_type`` / ``value`` mirror Catanatron's
+    ``Action`` (value is a node id, an edge, a trade tuple, or ``None``).
+    """
+
+    action_type: str
+    value: Any = None
+    win_prob: float
+    ci_low: float
+    ci_high: float
+    rollouts: int
 
 
 class PracticeResult(BaseModel):

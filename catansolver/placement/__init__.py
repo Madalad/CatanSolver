@@ -10,6 +10,7 @@ from .heuristic import best_initial_road, node_score, pair_score
 from .optimize import recommend_opening
 from .practice import generate_puzzle, grade_practice
 from .rollout import estimate_win_prob, wilson_interval
+from .winprob_model import win_prob_estimate
 
 __all__ = [
     "recommend_opening",
@@ -22,4 +23,5 @@ __all__ = [
     "default_policy",
     "generate_puzzle",
     "grade_practice",
+    "win_prob_estimate",
 ]
