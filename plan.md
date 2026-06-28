@@ -407,6 +407,8 @@ game — is the active next phase** (the original live-Colonist.io coach was dro
   2. **Human turn loop:** roll → build (settlement / city / road) → buy / play dev card → robber & discard → end turn. *(Playable end-to-end after this step.)*
   3. **Polish:** bank/port maritime trade actions, win screen, new-game flow, optional time-budgeted search.
 
+- **↩ Revisit from Phase 5 (second-player settlement ordering):** going second, *which* of the two settlements is placed second sets the opening hand (one card per adjacent producing hex). The opening advisor/practice win-% engine (`node_score` + gap model) is **hand-blind**, so for now the two spots are shown as unordered **A/B** with a "not a ranking" note (no ordering optimised). **Phase 6's full-game bot is hand-aware** — once it can evaluate a position *with* resources in hand, wire it in to choose the better placement order (evaluate both orderings, pick the higher win-%) and surface the recommended order. This is the natural home for the feature; doing it earlier would have meant a throwaway bespoke heuristic.
+
 - **Exit:** a human can play a complete 1v1 game against the bot in the browser, with the bot responding within a few seconds per turn.
 
 ---

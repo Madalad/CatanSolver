@@ -666,7 +666,9 @@ function drawHighlight(svg, pls, color) {
     if (n) {
       svg.appendChild(el("circle", { cx: n.x, cy: n.y, r: 13, fill: color, stroke: "#0b1118", "stroke-width": 2, "pointer-events": "none" }));
       const t = el("text", { x: n.x, y: n.y + 5, "text-anchor": "middle", "font-size": 13, "font-weight": "bold", fill: contrastInk(color), "pointer-events": "none" });
-      t.textContent = pls.length > 1 ? i + 1 : "★";
+      // Letters (A/B), not numbers — for the second player both go down together, so the
+      // label is just an identifier, not a ranking (see the going-second note in the panels).
+      t.textContent = pls.length > 1 ? String.fromCharCode(65 + i) : "★";
       svg.appendChild(t);
     }
   });
@@ -836,6 +838,12 @@ function renderResults() {
     row.onclick = () => { selected = r; render(); renderResults(); };
     div.appendChild(row);
   });
+  if (recs.some((r) => r.placements.length > 1)) {
+    const note = document.createElement("p");
+    note.className = "hint";
+    note.innerHTML = SECOND_ORDER_NOTE;
+    div.appendChild(note);
+  }
 }
 
 // Each recommendation carries two numbers: the calibrated **opening win-%** from the
@@ -846,8 +854,17 @@ function renderResults() {
 // model is unavailable. The earlier shelved win-% was a rollout-vs-weak-bot figure (~96%
 // where strong humans win ~44%); this one is calibrated against equal-strength self-play.
 const SCORE_HINT = "Strength score (higher = better) — production-weighted, with diversity and ports. Pre-ranks the candidates; the win-% maps this to a calibrated probability.";
-const WINPCT_HINT = "Calibrated opening win probability — P(you win) vs an equal-strength bot. It maps how much your opening out-produces your opponent's onto a win-%, calibrated on self-play. A balanced opening is ~50/50, but a clearly stronger one wins ~85% even against an equal opponent (and ~equally at every skill level we tested). The old weak-bot ~96% was an illusion.";
+const WINPCT_HINT = "Opening win probability — P(you win) vs an equal-strength bot, where both players complete the rest of the draft with their best opening. It maps how much your opening out-produces your opponent's onto a win-%. A balanced opening is ~50/50; the strongest openings reach ~60%, and going first edges going second (best play ≈51% vs ≈45%), in line with the ~56/44 first-mover advantage in elite 1v1 play.";
 const WINPCT_LABEL = "vs an equal-strength bot";
+
+// Going second, the two settlements (A & B) are placed back-to-back with no dice between
+// them, so the order shown is not a ranking. The one real effect of order — which spot gives
+// your opening hand (a card per adjacent hex of the settlement placed second) — the solver
+// doesn't weigh yet (planned for Phase 6, when the full-game bot can evaluate the hand).
+const SECOND_ORDER_NOTE =
+  "Going second: A &amp; B are placed together — the order isn't a ranking. Order only sets your "
+  + "opening hand (one card per adjacent hex of whichever is placed second), which the solver "
+  + "doesn't optimise yet.";
 
 function winPct(r) {
   return r && r.opening_win_prob != null ? Math.round(r.opening_win_prob * 100) : null;
@@ -1075,7 +1092,7 @@ function renderFeedback() {
   const n = USER_PIECES[r.seat];
   for (let i = 0; i < n; i++) {
     const s = sg(i), road = rg(i);
-    const head = n > 1 ? `Placement ${i + 1}` : "Your placement";
+    const head = n > 1 ? `Settlement ${String.fromCharCode(65 + i)}` : "Your placement";
     const block = document.createElement("div");
     block.className = "grade";
     block.innerHTML =
@@ -1107,7 +1124,8 @@ function renderFeedback() {
   const legend = document.createElement("p");
   legend.className = "hint";
   legend.innerHTML = "★ (in your colour) = model answer · cyan = a pick you clicked · ring = your spot (green ok / orange off)."
-    + "<br>Spots read as <b>numbers-of-adjacent-hexes (road direction)</b>, e.g. 5-6-9 (L).";
+    + "<br>Spots read as <b>numbers-of-adjacent-hexes (road direction)</b>, e.g. 5-6-9 (L)."
+    + (n > 1 ? "<br>" + SECOND_ORDER_NOTE : "");
   div.appendChild(legend);
 }
 

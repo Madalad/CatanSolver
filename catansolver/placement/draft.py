@@ -87,6 +87,16 @@ def opening_prior_policy(color: Color):
     return _TopOpeningPlayer(color)
 
 
+def opening_optimal_policy(color: Color):
+    """Deterministic *best-opening* policy: place the single top spot by the production
+    heuristic (top_n=1) with the best expansion road. Used to **finish the remaining draft
+    picks** when estimating opening win-% — so the win-% is read against an opponent (and a
+    user tail-pick) playing the best opening the bot understands, not a random one. This is
+    far more realistic than a WeightedRandom completion, which made the opponent look weak
+    and inflated the numbers."""
+    return _TopOpeningPlayer(color, top_n=1)
+
+
 def _pick_road(game, desired: Optional[Edge]) -> Action:
     """Return a legal initial-road action, preferring ``desired`` (matched by node
     set, orientation-independent) and falling back to any legal road."""

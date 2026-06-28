@@ -25,7 +25,13 @@ from catansolver.engine.config import COLONIST_1V1, RulesConfig
 from catansolver.io.schema import OpeningPlacementRequest
 from catansolver.learn import extract_features
 
-from .draft import PolicyFactory, _pick_road, drive_to_user_decision, rollout_policy
+from .draft import (
+    PolicyFactory,
+    _pick_road,
+    drive_to_user_decision,
+    opening_optimal_policy,
+    rollout_policy,
+)
 from .heuristic import node_score
 
 
@@ -88,8 +94,8 @@ def opening_win_prob_gap(
     request: OpeningPlacementRequest,
     user_placements: List[Tuple[int, Edge]],
     gap_model,
-    n_samples: int = 20,
-    policy: PolicyFactory = rollout_policy,
+    n_samples: int = 1,
+    policy: PolicyFactory = opening_optimal_policy,
     rules: RulesConfig = COLONIST_1V1,
     seed_base: int = 0,
 ) -> float:
@@ -97,12 +103,20 @@ def opening_win_prob_gap(
     mapped through ``gap_model`` (a 1-feature logistic, ``docs/opening_gap_model.json``).
 
     Same scaffolding as :func:`opening_win_prob` — drive the draft, play the candidate,
-    finish the draft over ``n_samples`` completions — but the leaf read is the production
-    heuristic's gap rather than the learned value model. The gap is a *better* opening
-    predictor (lower Brier; see docs/opening-winprob.md) because at the opening the
-    purpose-built production score beats the general mid-game value model. Win-% is inherently
-    relative, so it must be the *gap*: the same opening is dominant on a poor board and
-    mediocre on a rich one, and differencing against the opponent cancels the board."""
+    finish the draft — but the leaf read is the production heuristic's gap rather than the
+    learned value model. The remaining draft picks (the opponent's, and the user's tail pick)
+    are completed with :func:`opening_optimal_policy` — each player's **best opening as the bot
+    understands it** — not a random baseline; this is more realistic and de-inflates the gap
+    (a random opponent looked artificially weak). Because that completion is deterministic,
+    ``n_samples=1`` suffices (each sample only re-seats colours, which the gap is invariant to).
+
+    Win-% is inherently relative, so it must be the *gap*: the same opening is dominant on a
+    poor board and mediocre on a rich one, and differencing against the opponent cancels the
+    board. NOTE: the optimal completion is what makes this realistic — against a *random*
+    completion the optimized pick faced an artificially weak opponent and the gap (and win-%)
+    inflated to ~80%. With both sides completed at the bot's best opening, the gap model lands
+    near the empirical first/second prior on its own (best opening ≈51% first / ≈45% second,
+    max ~60%, vs the ~56/44 elite-1v1 first-mover edge), so no post-hoc scaling is applied."""
     probs = []
     for i in range(n_samples):
         game, user = drive_to_user_decision(request, policy, seed=seed_base + i, rules=rules)

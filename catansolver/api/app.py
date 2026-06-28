@@ -44,10 +44,13 @@ app = FastAPI(title="CatanSolver", description="Colonist.io 1v1 opening-placemen
 # rollout-vs-weak-bot estimate that read ~96% where strong humans win ~44%. We surface an
 # honest "≈X% vs an equal-strength bot" from the **heuristic opening-strength gap** mapped
 # through a logistic (docs/opening_gap_model.json): at the opening the purpose-built
-# production score out-predicts the learned value model (Brier 0.155 vs 0.195), and the
-# gap→win% map is the same whether the opponent plays at WeightedRandom or advisor level —
-# i.e. opening leverage is skill-independent (see docs/opening-winprob.md).
-WINPROB_SAMPLES = 24  # draft completions averaged per estimate (~0.2s)
+# production score out-predicts the learned value model (Brier 0.155 vs 0.195).
+# The remaining draft picks (the opponent's, and the user's tail pick) are completed at the
+# bot's **best** opening, not a random one — without that the optimized pick faced an
+# artificially weak opponent and the number inflated to ~80%. With realistic completion the
+# gap model self-centres (best opening ≈51% first / ≈45% second, max ~60%), close to the
+# ~56/44 first-mover edge seen in elite 1v1 play, so no extra scaling is applied.
+WINPROB_SAMPLES = 1  # the optimal-completion is deterministic, so one pass suffices (~10ms)
 WINPROB_LABEL = "vs an equal-strength bot"
 
 
