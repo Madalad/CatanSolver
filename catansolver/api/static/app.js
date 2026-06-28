@@ -1113,7 +1113,7 @@ function renderFeedback() {
     wl.title = WINPCT_HINT;
     wl.innerHTML =
       `<b>≈${u}% win</b> with your opening`
-      + (o != null ? ` <span style="color:#6f8597">· model's line ≈${o}%</span>` : "")
+      + (o != null ? ` <span style="color:#6f8597">· best pick = ${o}% win</span>` : "")
       + `<br><span class="hint" style="margin:2px 0 0">${WINPCT_LABEL} — your win-% reflects how much your opening out-produces your opponent's.</span>`;
     div.appendChild(wl);
   }
