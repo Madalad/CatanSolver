@@ -5,65 +5,87 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>CatanSolver — 1v1 Opening Advisor</title>
 <style>
-  body { font-family: system-ui, sans-serif; margin: 0; background: #0f1720; color: #e6edf3; font-size: 15px; }
-  header { padding: 10px 16px; background: #16202b; border-bottom: 1px solid #283543; display: flex; align-items: center; gap: 20px; }
+  :root {
+    --bg:#0f1720; --panel:#16202b; --border:#283543; --border-2:#34465a;
+    --text:#e6edf3; --muted:#8aa0b3; --muted-2:#6f8597;
+    --btn-bg:#22303f; --btn-hover:#2c3e50; --accent:#1f6feb; --accent-line:#4da3ff;
+    --rec-hover:#1d2935; --rec-sel:#143b22; --ok:#56d364; --bad:#f0883e;
+    --stat-bg:#0f1a24; --winline-bg:#11201a; --winline-border:#1f3a2a; --winline-text:#cfe3d2;
+    --info-text:#d7e0ea; --info-strong:#ffffff; --popup-bg:#1b2430; --choice:#9ed9ad;
+    --svg-bg:#0b1118; --overlay:rgba(8,12,18,.72);
+  }
+  [data-theme="light"] {
+    --bg:#eef1f5; --panel:#ffffff; --border:#dbe1e8; --border-2:#c4cdd7;
+    --text:#1a2330; --muted:#566472; --muted-2:#6a7886;
+    --btn-bg:#e9eef3; --btn-hover:#dde5ec; --accent:#1f6feb; --accent-line:#1f6feb;
+    --rec-hover:#eef2f6; --rec-sel:#d7eedd; --ok:#1a7f37; --bad:#bc4c00;
+    --stat-bg:#f0f3f7; --winline-bg:#e7f4ea; --winline-border:#bfe0c8; --winline-text:#1a5e34;
+    --info-text:#2a3744; --info-strong:#0b1320; --popup-bg:#ffffff; --choice:#1a7f37;
+    --svg-bg:#0b1118; --overlay:rgba(8,12,18,.55);
+  }
+  body { font-family: system-ui, sans-serif; margin: 0; background: var(--bg); color: var(--text); font-size: 15px; }
+  header { padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 20px; }
   header h1 { font-size: 18px; margin: 0; font-weight: 600; }
-  header span { color: #8aa0b3; font-size: 13px; font-weight: 400; }
+  header span { color: var(--muted); font-size: 13px; font-weight: 400; }
   .tabs { display: flex; gap: 6px; }
-  button.tab { background: transparent; border: 1px solid #34465a; color: #8aa0b3; padding: 6px 16px; }
-  button.tab.active { background: #1f6feb; border-color: #1f6feb; color: #fff; font-weight: 600; }
+  button.tab { background: transparent; border: 1px solid var(--border-2); color: var(--muted); padding: 6px 16px; }
+  button.tab.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  #themeToggle { margin-left: auto; }
   main { display: flex; gap: 16px; padding: 16px; align-items: flex-start; flex-wrap: wrap; }
-  .panel { background: #16202b; border: 1px solid #283543; border-radius: 8px; padding: 12px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
   .controls { width: 300px; }
-  .controls h3 { margin: 12px 0 6px; font-size: 12px; color: #8aa0b3; text-transform: uppercase; letter-spacing: .05em; }
-  button { background: #22303f; color: #e6edf3; border: 1px solid #34465a; border-radius: 6px; padding: 7px 12px; cursor: pointer; font-size: 14px; }
-  button:hover { background: #2c3e50; }
-  button.active { outline: 2px solid #4da3ff; outline-offset: 1px; }
-  button.primary { background: #1f6feb; border-color: #1f6feb; font-weight: 600; }
+  .controls h3 { margin: 12px 0 6px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  button { background: var(--btn-bg); color: var(--text); border: 1px solid var(--border-2); border-radius: 6px; padding: 7px 12px; cursor: pointer; font-size: 14px; }
+  button:hover { background: var(--btn-hover); }
+  button.active { outline: 2px solid var(--accent-line); outline-offset: 1px; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
   button:disabled { opacity: .5; cursor: default; }
   .swatches, .numbers { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
-  select, input { background: #22303f; color: #e6edf3; border: 1px solid #34465a; border-radius: 6px; padding: 5px; }
-  .results .rec { padding: 7px 8px; border-bottom: 1px solid #283543; cursor: pointer; font-size: 13px; }
-  .results .rec:hover { background: #1d2935; }
-  .results .rec.sel { background: #143b22; }
-  .status.ok { color: #56d364; } .status.bad { color: #f0883e; }
+  select, input { background: var(--btn-bg); color: var(--text); border: 1px solid var(--border-2); border-radius: 6px; padding: 5px; }
+  .results .rec { padding: 7px 8px; border-bottom: 1px solid var(--border); cursor: pointer; font-size: 13px; }
+  .results .rec:hover { background: var(--rec-hover); }
+  .results .rec.sel { background: var(--rec-sel); }
+  .status.ok { color: var(--ok); } .status.bad { color: var(--bad); }
   .status { font-size: 13px; min-height: 18px; margin: 8px 0 0; }
-  .hint { font-size: 12px; color: #8aa0b3; min-height: 16px; margin: 6px 0; }
-  svg { background: #0b1118; border-radius: 8px; display: block; }
+  .hint { font-size: 12px; color: var(--muted); min-height: 16px; margin: 6px 0; }
+  svg { background: var(--svg-bg); border-radius: 8px; display: block; }
   .hidden { display: none !important; }
   /* prominent submit button */
   button.submit { width: 100%; background: #238636; border-color: #2ea043; color: #fff; font-weight: 700; font-size: 16px; padding: 12px 18px; margin: 4px 0; }
   button.submit:hover { background: #2ea043; }
-  button.submit:disabled { background: #22303f; border-color: #34465a; }
+  button.submit:disabled { background: var(--btn-bg); border-color: var(--border-2); color: var(--text); }
   /* scenario chooser modal */
-  .modal-overlay { position: fixed; inset: 0; background: rgba(8,12,18,.72); display: flex; align-items: center; justify-content: center; z-index: 50; }
-  .modal-card { background: #16202b; border: 1px solid #34465a; border-radius: 12px; padding: 22px 24px; width: 400px; box-shadow: 0 14px 44px rgba(0,0,0,.55); }
+  .modal-overlay { position: fixed; inset: 0; background: var(--overlay); display: flex; align-items: center; justify-content: center; z-index: 50; }
+  .modal-card { background: var(--panel); border: 1px solid var(--border-2); border-radius: 12px; padding: 22px 24px; width: 400px; box-shadow: 0 14px 44px rgba(0,0,0,.55); }
   .modal-card h2 { margin: 0 0 4px; font-size: 19px; }
   .scenario-buttons { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
   .scenario-buttons button { display: flex; flex-direction: column; align-items: flex-start; text-align: left; padding: 11px 14px; font-size: 15px; font-weight: 600; }
-  .scenario-buttons button span { font-size: 12px; color: #8aa0b3; font-weight: 400; margin-top: 2px; }
+  .scenario-buttons button span { font-size: 12px; color: var(--muted); font-weight: 400; margin-top: 2px; }
   .modal-actions { display: flex; gap: 8px; margin-top: 16px; }
   .chip-grid { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 4px; }
-  .chip-grid button.active { outline: 2px solid #4da3ff; outline-offset: 1px; }
-  .info-body { font-size: 14px; line-height: 1.5; color: #d7e0ea; }
+  .chip-grid button.active { outline: 2px solid var(--accent-line); outline-offset: 1px; }
+  .info-body { font-size: 14px; line-height: 1.5; color: var(--info-text); }
   .info-body p { margin: 8px 0; }
-  .info-body b { color: #fff; }
+  .info-body b { color: var(--info-strong); }
   /* small "(i)" info button next to a heading */
   .infobtn { width: 20px; height: 20px; padding: 0; border-radius: 50%; font-style: italic;
              font-weight: 700; font-size: 12px; line-height: 18px; vertical-align: middle; }
   /* practice scoreboard + feedback */
   .scoreboard { display: flex; gap: 8px; margin: 6px 0 2px; }
-  .stat { flex: 1; background: #0f1a24; border: 1px solid #283543; border-radius: 6px; padding: 6px 4px; text-align: center; }
+  .stat { flex: 1; background: var(--stat-bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 4px; text-align: center; }
   .stat .v { font-size: 20px; font-weight: 700; }
-  .stat .l { font-size: 10px; color: #8aa0b3; text-transform: uppercase; letter-spacing: .05em; }
+  .stat .l { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
   .verdict { font-size: 16px; font-weight: 700; margin: 6px 0; }
-  .verdict.ok { color: #56d364; } .verdict.bad { color: #f0883e; }
-  .winline { font-size: 14px; color: #cfe3d2; margin: 4px 0 8px; padding: 6px 8px; background: #11201a; border: 1px solid #1f3a2a; border-radius: 6px; }
-  .grade { font-size: 13px; padding: 5px 6px; border-bottom: 1px solid #283543; }
+  .verdict.ok { color: var(--ok); } .verdict.bad { color: var(--bad); }
+  .winline { font-size: 14px; color: var(--winline-text); margin: 4px 0 8px; padding: 6px 8px; background: var(--winline-bg); border: 1px solid var(--winline-border); border-radius: 6px; }
+  .grade { font-size: 13px; padding: 5px 6px; border-bottom: 1px solid var(--border); }
   .grade .mark { font-weight: 700; }
-  .grade .ok { color: #56d364; } .grade .bad { color: #f0883e; }
-  .grade .sub { color: #8aa0b3; font-size: 12px; }
+  .grade .ok { color: var(--ok); } .grade .bad { color: var(--bad); }
+  .grade .sub { color: var(--muted); font-size: 12px; }
 </style>
+<script>/* set theme before paint to avoid a flash */
+try { document.documentElement.dataset.theme = localStorage.getItem("catan_theme") || "dark"; }
+catch (e) { document.documentElement.dataset.theme = "dark"; }</script>
 </head>
 <body>
 <header>
@@ -73,11 +95,12 @@
     <button id="tabPractice" class="tab">Practice</button>
     <button id="tabRules" class="tab">Rules</button>
   </div>
+  <button id="themeToggle" class="tab" title="Toggle light / dark mode">☀️ Light</button>
 </header>
 <main>
   <!-- ADVISOR controls -->
   <div class="panel controls" id="advisorControls">
-    <div id="practiceBuildBar" class="hidden" style="margin:-2px 0 12px; padding:10px 12px; background:#11201a; border:1px solid #1f6feb; border-radius:8px">
+    <div id="practiceBuildBar" class="hidden" style="margin:-2px 0 12px; padding:10px 12px; background:var(--winline-bg); border:1px solid var(--accent); border-radius:8px">
       <b>🛠 Building a board for practice</b>
       <p class="hint" style="margin:4px 0 8px">Edit the board below (paint, or click hexes/ports), then use it for practice.</p>
       <button id="useInPractice" class="primary">Use in practice ▶</button>
@@ -121,63 +144,63 @@
     <div><button id="resetScore">Reset score</button></div>
   </div>
 
-  <div class="panel" id="boardPanel"><svg id="board"></svg></div>
+  <div class="panel" id="boardPanel"><svg id="board" style="background:#1b65a2"></svg></div>
 
   <!-- ADVISOR results -->
   <div class="panel results" id="advisorResults" style="width: 300px">
     <div id="advisorRevealSlot"></div>
-    <h3 style="margin-top:0; color:#8aa0b3; font-size:12px; text-transform:uppercase; letter-spacing:.05em">Recommendations</h3>
+    <h3 style="margin-top:0; color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.05em">Recommendations</h3>
     <div id="results"><p class="hint">Build a board and click Analyze.</p></div>
   </div>
 
   <!-- PRACTICE results -->
   <div class="panel results hidden" id="practiceResults" style="width: 300px">
-    <h3 style="margin-top:0; color:#8aa0b3; font-size:12px; text-transform:uppercase; letter-spacing:.05em">Feedback</h3>
+    <h3 style="margin-top:0; color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.05em">Feedback</h3>
     <div id="feedback"><p class="hint">Click <b>New puzzle</b> to begin.</p></div>
   </div>
 
   <!-- RULES -->
-  <div class="panel hidden" id="rulesPanel" style="max-width:680px; line-height:1.5">
+  <div class="panel hidden" id="rulesPanel" style="max-width:680px; line-height:1.5; margin:0 auto">
     <h2 style="margin-top:0">Colonist.io 1v1 ruleset</h2>
     <p class="hint" style="margin-top:0">This solver targets the competitive <b>1-vs-1</b> mode on Colonist.io, played on the classic base board. It differs from standard 4-player Catan in a few important ways (highlighted below).</p>
 
-    <h3 style="color:#8aa0b3; text-transform:uppercase; font-size:12px; letter-spacing:.05em">Goal</h3>
+    <h3 style="color:var(--muted); text-transform:uppercase; font-size:12px; letter-spacing:.05em">Goal</h3>
     <ul>
       <li><b>First to 15 victory points</b> wins (standard Catan is 10).</li>
       <li>VP sources: settlement = 1, city = 2, each Victory-Point dev card = 1, <b>Longest Road</b> (5+ road segments) = 2, <b>Largest Army</b> (3+ played knights) = 2.</li>
     </ul>
 
-    <h3 style="color:#8aa0b3; text-transform:uppercase; font-size:12px; letter-spacing:.05em">Board &amp; setup</h3>
+    <h3 style="color:var(--muted); text-transform:uppercase; font-size:12px; letter-spacing:.05em">Board &amp; setup</h3>
     <ul>
       <li>Classic base board: 19 hexes (4 wood, 4 sheep, 4 wheat, 3 brick, 3 ore, 1 desert), 18 number tokens, 9 ports.</li>
       <li>Number tokens follow the standard <b>spiral</b> layout — balanced so the high-odds <b>6s and 8s stay spread out</b> (never adjacent) — with a random starting hex and direction.</li>
       <li>2 players, snake-draft opening: <b>P1, P2, P2, P1</b> (each settlement placed with a road). The resources of your <b>second-placed</b> settlement form your opening hand (one card per adjacent producing hex).</li>
     </ul>
 
-    <h3 style="color:#8aa0b3; text-transform:uppercase; font-size:12px; letter-spacing:.05em">Friendly Robber <span style="color:#e2711d">(1v1 difference)</span></h3>
+    <h3 style="color:var(--muted); text-transform:uppercase; font-size:12px; letter-spacing:.05em">Friendly Robber <span style="color:#e2711d">(1v1 difference)</span></h3>
     <ul>
       <li>When you roll a 7 or play a knight, you move the robber — but you may <b>only steal from / block a player who has at least 3 visible victory points</b>. A player below 3 VP cannot be targeted.</li>
     </ul>
 
-    <h3 style="color:#8aa0b3; text-transform:uppercase; font-size:12px; letter-spacing:.05em">Discarding on a 7 <span style="color:#e2711d">(1v1 difference)</span></h3>
+    <h3 style="color:var(--muted); text-transform:uppercase; font-size:12px; letter-spacing:.05em">Discarding on a 7 <span style="color:#e2711d">(1v1 difference)</span></h3>
     <ul>
       <li>You discard half your hand (rounded down) only if you hold <b>more than 9 cards</b> (i.e. 10+).</li>
     </ul>
 
-    <h3 style="color:#8aa0b3; text-transform:uppercase; font-size:12px; letter-spacing:.05em">Trading <span style="color:#e2711d">(1v1 difference)</span></h3>
+    <h3 style="color:var(--muted); text-transform:uppercase; font-size:12px; letter-spacing:.05em">Trading <span style="color:#e2711d">(1v1 difference)</span></h3>
     <ul>
       <li><b>No player-to-player (domestic) trading</b> — in 1v1 a trade mostly helps your only opponent, so it is disabled, matching competitive play.</li>
       <li><b>Bank &amp; port (maritime) trades are allowed:</b> 4:1 with the bank, 3:1 at a generic port, 2:1 at a matching-resource port.</li>
     </ul>
 
-    <h3 style="color:#8aa0b3; text-transform:uppercase; font-size:12px; letter-spacing:.05em">Standard components</h3>
+    <h3 style="color:var(--muted); text-transform:uppercase; font-size:12px; letter-spacing:.05em">Standard components</h3>
     <ul>
       <li>Standard building costs, a bank of 19 cards per resource, and the standard 25-card dev deck (14 knights, 5 victory point, 2 road building, 2 year of plenty, 2 monopoly).</li>
     </ul>
 
-    <p class="hint" style="margin-top:16px; border-top:1px solid #283543; padding-top:12px">
+    <p class="hint" style="margin-top:16px; border-top:1px solid var(--border); padding-top:12px">
       For the full, detailed rules, see the official reference at
-      <a href="https://colonist.io/catan-rules" target="_blank" rel="noopener" style="color:#4da3ff">colonist.io/catan-rules</a>.
+      <a href="https://colonist.io/catan-rules" target="_blank" rel="noopener" style="color:var(--accent)">colonist.io/catan-rules</a>.
     </p>
   </div>
 </main>
@@ -187,9 +210,9 @@
   <div class="modal-card">
     <h2>Set this hex</h2>
     <p class="hint">Pick a resource, then a number. Desert needs no number.</p>
-    <h3 style="margin:12px 0 6px; font-size:12px; color:#8aa0b3; text-transform:uppercase; letter-spacing:.05em">Resource</h3>
+    <h3 style="margin:12px 0 6px; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em">Resource</h3>
     <div class="chip-grid" id="hexResChoices"></div>
-    <h3 style="margin:12px 0 6px; font-size:12px; color:#8aa0b3; text-transform:uppercase; letter-spacing:.05em">Number</h3>
+    <h3 style="margin:12px 0 6px; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em">Number</h3>
     <div class="chip-grid" id="hexNumChoices"></div>
     <div class="modal-actions">
       <button id="hexApply" class="primary">Apply</button>
@@ -204,7 +227,7 @@
   <div class="modal-card">
     <h2>Set this port</h2>
     <p class="hint">Pick the trade type. <b>3:1</b> trades any resource; a resource port is <b>2:1</b> for that resource. (Where the port sits is fixed.)</p>
-    <h3 style="margin:12px 0 6px; font-size:12px; color:#8aa0b3; text-transform:uppercase; letter-spacing:.05em">Type</h3>
+    <h3 style="margin:12px 0 6px; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em">Type</h3>
     <div class="chip-grid" id="portTypeChoices"></div>
     <div class="modal-actions">
       <button id="portApply" class="primary">Apply</button>
@@ -232,13 +255,13 @@
   <div class="modal-card">
     <h2>Choose a practice scenario</h2>
     <p class="hint">Place the best opening for the situation, then submit to score it.</p>
-    <h3 style="margin:14px 0 0; font-size:12px; color:#8aa0b3; text-transform:uppercase; letter-spacing:.05em">Board</h3>
+    <h3 style="margin:14px 0 0; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em">Board</h3>
     <div class="scenario-buttons">
       <button data-boardmode="random">🎲 Random board<span>a new random board every puzzle</span></button>
       <button data-boardmode="fixed">📌 Fixed board<span>one random board, kept for every puzzle</span></button>
       <button data-boardmode="configure">✏️ Build your own board<span>design a board, then practice it</span></button>
     </div>
-    <h3 style="margin:14px 0 0; font-size:12px; color:#8aa0b3; text-transform:uppercase; letter-spacing:.05em">Scenario</h3>
+    <h3 style="margin:14px 0 0; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em">Scenario</h3>
     <div class="scenario-buttons">
       <button data-seat="FIRST">Going first<span>empty board — place 1 settlement + road</span></button>
       <button data-seat="SECOND">Going second<span>opponent's 1st is down — place both of yours</span></button>

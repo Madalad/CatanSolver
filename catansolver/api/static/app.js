@@ -70,6 +70,15 @@ const el = (tag, attrs) => {
   return e;
 };
 
+// ---- theme (light / dark) --------------------------------------------------
+function currentTheme() { return document.documentElement.dataset.theme === "light" ? "light" : "dark"; }
+function setTheme(t) {
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem("catan_theme", t); } catch (e) {}
+  const b = $("themeToggle");
+  if (b) b.textContent = t === "light" ? "🌙 Dark" : "☀️ Light";  // shows what clicking switches to
+}
+
 async function init() {
   geom = await (await fetch("/api/layout")).json();
   const svg = $("board");
@@ -86,9 +95,11 @@ async function init() {
   $("analyze").onclick = analyze;
   $("undoAnalyze").onclick = clearAnalysis;
   // tabs
-  $("tabAdvisor").onclick = () => setMode("advisor");
-  $("tabPractice").onclick = () => setMode("practice");
-  $("tabRules").onclick = () => setMode("rules");
+  $("tabAdvisor").onclick = () => { hideTutorial(); setMode("advisor"); };
+  $("tabPractice").onclick = () => { hideTutorial(); setMode("practice"); };
+  $("tabRules").onclick = () => { hideTutorial(); setMode("rules"); };
+  $("themeToggle").onclick = () => setTheme(currentTheme() === "light" ? "dark" : "light");
+  setTheme(currentTheme());  // sync the toggle label with the theme set pre-paint
   // hex editor modal
   $("hexApply").onclick = applyHexEdit;
   $("hexClearOne").onclick = clearHexEdit;
@@ -122,6 +133,7 @@ async function init() {
   $("scenarioModal").onclick = (e) => { if (e.target.id === "scenarioModal" && puzzle) hideScenarioModal(); };
   updateScoreboard();
   await loadClearBoard();
+  maybeStartAdvisorTutorial();
 }
 
 // Load a real board (for valid ports/structure) but start it visually empty.
@@ -131,6 +143,142 @@ async function loadClearBoard() {
   board.ports.forEach((p) => { p.type = null; });
   resetDraft();
   render();
+}
+
+// --------------------------------------------------------------------------- //
+// First-visit tutorials — short walkthroughs of the Advisor and Practice flows. Each shows on
+// every load until its own "Don't show again" is clicked, remembered in localStorage forever.
+// --------------------------------------------------------------------------- //
+const ADVISOR_TUTORIAL_KEY = "catan_tutorial_dismissed_v1";
+const PRACTICE_TUTORIAL_KEY = "catan_practice_tutorial_dismissed_v1";
+const ADVISOR_TUTORIAL_STEPS = [
+  { sel: "#randomize", place: "right",
+    text: "Build a board first: click hexes to edit them one by one, or hit <b>🎲&nbsp;Random&nbsp;Board</b> for a full random layout." },
+  { sel: "#seat", place: "right",
+    text: "Pick <b>Your seat</b> — going first, going second, or your final first-pick." },
+  { sel: "#analyze", place: "right",
+    text: "Hit <b>Analyze ▶</b> to rank every legal opening for that seat." },
+  { sel: "#advisorResults", place: "left",
+    text: "Your best openings show here with win-%. Pick one, then use <b>Reveal rest of draft</b> to play the opening out optimally." },
+];
+const PRACTICE_TUTORIAL_STEPS = [
+  { sel: "#practiceHint", place: "right",
+    text: "Place your settlement(s) and road(s): click a node, then an edge. Click a placed piece to remove it." },
+  { sel: "#submitPlacement", place: "right",
+    text: "When everything's down, hit <b>Submit answer ✓</b> to grade your opening." },
+  { sel: "#practiceResults", place: "left",
+    text: "You get a score out of 10, the solver's top picks, and <b>Reveal rest of draft</b> to see the optimal line." },
+  { sel: "#changeScenario", place: "right",
+    text: "Hit <b>New puzzle</b> for another, or <b>Change</b> to switch your seat or board. Your score is tracked below." },
+];
+
+let tutorialSteps = [];
+let tutorialKey = null;
+let tutorialTab = "advisor";
+let tutorialStep = 0;
+let tutorialTarget = null;
+let practiceTutorialShownThisLoad = false;
+
+function maybeStartAdvisorTutorial() {
+  startTutorial(ADVISOR_TUTORIAL_STEPS, ADVISOR_TUTORIAL_KEY, "advisor");
+}
+
+function maybeStartPracticeTutorial() {
+  if (practiceTutorialShownThisLoad) return;  // once per page load (until dismissed)
+  practiceTutorialShownThisLoad = true;
+  startTutorial(PRACTICE_TUTORIAL_STEPS, PRACTICE_TUTORIAL_KEY, "practice");
+}
+
+function startTutorial(steps, key, tab) {
+  try { if (localStorage.getItem(key)) return; } catch (e) { return; }
+  const open = $("tutorialPopup");
+  if (open && open.style.display === "block") return;  // don't stack two tutorials
+  tutorialSteps = steps; tutorialKey = key; tutorialTab = tab; tutorialStep = 0;
+  showTutorialStep();
+  window.addEventListener("resize", repositionTutorial);
+}
+
+function tutorialEl() {
+  let pop = $("tutorialPopup");
+  if (pop) return pop;
+  pop = document.createElement("div");
+  pop.id = "tutorialPopup";
+  pop.style.cssText = "position:fixed; z-index:1500; width:205px; background:var(--panel);"
+    + "border:1px solid var(--accent-line); border-radius:8px; padding:11px 12px; font-size:13px;"
+    + "line-height:1.4; box-shadow:0 4px 16px rgba(0,0,0,.5); color:var(--text);";
+  pop.innerHTML =
+    '<div id="tutText" style="margin-bottom:10px"></div>'
+    + '<div style="display:flex; align-items:center; justify-content:space-between; gap:6px">'
+    + '<span id="tutProgress" style="color:var(--muted-2); font-size:11px"></span>'
+    + '<span><button id="tutNever" style="font-size:11px; padding:3px 7px; background:transparent; border:1px solid var(--border-2); color:var(--muted); border-radius:5px; cursor:pointer">Don’t show again</button> '
+    + '<button id="tutOk" style="font-size:12px; padding:3px 12px; background:var(--accent); border:1px solid var(--accent); color:#fff; border-radius:5px; cursor:pointer; font-weight:600">Okay</button></span>'
+    + '</div>';
+  document.body.appendChild(pop);
+  pop.querySelector("#tutOk").onclick = tutorialNext;
+  pop.querySelector("#tutNever").onclick = tutorialDismiss;
+  return pop;
+}
+
+function showTutorialStep() {
+  const step = tutorialSteps[tutorialStep];
+  if (!step) return hideTutorial();
+  if (mode !== tutorialTab) setMode(tutorialTab, true);
+  setTutorialTarget(document.querySelector(step.sel));
+  const pop = tutorialEl();
+  pop.style.display = "block";
+  pop.querySelector("#tutText").innerHTML = step.text;
+  pop.querySelector("#tutProgress").textContent = (tutorialStep + 1) + " / " + tutorialSteps.length;
+  pop.querySelector("#tutOk").textContent = tutorialStep === tutorialSteps.length - 1 ? "Done" : "Okay";
+  positionTutorial(pop, tutorialTarget, step.place);
+}
+
+// Outline the element a step points at, clearing the previous one.
+function setTutorialTarget(el) {
+  if (tutorialTarget) { tutorialTarget.style.outline = ""; tutorialTarget.style.outlineOffset = ""; }
+  tutorialTarget = el;
+  if (el) { el.style.outline = "2px solid #4da3ff"; el.style.outlineOffset = "2px"; }
+}
+
+// Place the popup beside its target, clamped to the viewport. It aligns *vertically* with the
+// target element but anchors *horizontally* to the target's whole panel, so a popup for a
+// left-column control sits out in the board area rather than covering the other controls.
+function positionTutorial(pop, target, place) {
+  if (!target) return;
+  const r = target.getBoundingClientRect();
+  const panel = target.closest(".panel") || target;
+  const pr = panel.getBoundingClientRect();
+  const pw = pop.offsetWidth, ph = pop.offsetHeight, gap = 14;
+  let left, top;
+  if (place === "left") { left = pr.left - pw - gap; top = r.top; }
+  else { left = pr.right + gap; top = r.top; }  // default: right of the panel
+  left = Math.max(8, Math.min(left, window.innerWidth - pw - 8));
+  top = Math.max(8, Math.min(top, window.innerHeight - ph - 8));
+  pop.style.left = left + "px";
+  pop.style.top = top + "px";
+}
+
+function repositionTutorial() {
+  const step = tutorialSteps[tutorialStep];
+  const pop = $("tutorialPopup");
+  if (pop && pop.style.display !== "none" && step) positionTutorial(pop, tutorialTarget, step.place);
+}
+
+function tutorialNext() {
+  tutorialStep++;
+  if (tutorialStep >= tutorialSteps.length) hideTutorial();
+  else showTutorialStep();
+}
+
+function tutorialDismiss() {
+  try { localStorage.setItem(tutorialKey, "1"); } catch (e) {}
+  hideTutorial();
+}
+
+function hideTutorial() {
+  setTutorialTarget(null);
+  const pop = $("tutorialPopup");
+  if (pop) pop.style.display = "none";
+  window.removeEventListener("resize", repositionTutorial);
 }
 
 // ---- scenario modal --------------------------------------------------------
@@ -470,7 +618,7 @@ function cursorHint(text, ev) {
     h.id = "cursorHint";
     h.style.cssText =
       "position:fixed; z-index:1000; max-width:230px; padding:7px 10px; pointer-events:none;"
-      + "background:#1b2430; color:#e6edf3; border:1px solid #38465a; border-radius:6px;"
+      + "background:var(--popup-bg); color:var(--text); border:1px solid var(--border-2); border-radius:6px;"
       + "font-size:12px; line-height:1.4; box-shadow:0 2px 10px rgba(0,0,0,.45); opacity:0;"
       + "transition:opacity .2s;";
     document.body.appendChild(h);
@@ -737,8 +885,9 @@ function revealButton(list, getSel, setSel, getRev, setRev, redraw, marginTop = 
   const btn = document.createElement("button");
   btn.textContent = revealed ? "Hide rest of draft" : "Reveal rest of draft";
   btn.style.cssText = "margin:" + marginTop + "px 0 10px; font-size:16px; padding:8px 18px;"
-    + "cursor:pointer; border-radius:6px; border:1px solid #38465a; color:#e6edf3; background:"
-    + (revealed ? "#2f6fc4" : "#1b2430") + ";";
+    + "cursor:pointer; border-radius:6px; border:1px solid var(--border-2); color:"
+    + (revealed ? "#fff" : "var(--text)") + "; background:"
+    + (revealed ? "var(--accent)" : "var(--popup-bg)") + ";";
   btn.onclick = () => {
     if (revealed) {
       setRev(null);
@@ -928,7 +1077,7 @@ function renderResults() {
     const spots = r.placements
       .map((p) => `${spotName(p.settlement)} (${roadDir(p.settlement, p.road)})`)
       .join("  +  ");
-    row.innerHTML = `<b>#${i + 1}</b> ${spots}<br><span style="color:#8aa0b3">${scoreLabel(r)}</span>`;
+    row.innerHTML = `<b>#${i + 1}</b> ${spots}<br><span style="color:var(--muted)">${scoreLabel(r)}</span>`;
     row.onclick = () => {
       if (selected !== r) advisorReveal = null;  // changing pick hides the revealed line
       selected = r;
@@ -980,8 +1129,8 @@ function rankedForDisplay(list) {
 function scoreLabel(r) {
   const wp = winPct(r);
   if (wp == null) return `<span title="${SCORE_HINT}">score ${r.heuristic_score.toFixed(2)}</span>`;
-  return `<span title="${WINPCT_HINT}"><b style="color:#cfe3d2">≈${wp}%</b> <span style="color:#6f8597">${WINPCT_LABEL}</span></span>`
-    + ` <span style="color:#6f8597" title="${SCORE_HINT}">· score ${r.heuristic_score.toFixed(2)}</span>`;
+  return `<span title="${WINPCT_HINT}"><b style="color:var(--winline-text)">≈${wp}%</b> <span style="color:var(--muted-2)">${WINPCT_LABEL}</span></span>`
+    + ` <span style="color:var(--muted-2)" title="${SCORE_HINT}">· score ${r.heuristic_score.toFixed(2)}</span>`;
 }
 
 // --------------------------------------------------------------------------- //
@@ -1010,6 +1159,7 @@ async function newPuzzle() {
     $("scenarioLabel").textContent = seatLabel + tag;
     render();
     renderFeedback();
+    maybeStartPracticeTutorial();  // walk first-time users through the practice flow
   } finally {
     btn.disabled = false;
   }
@@ -1183,7 +1333,7 @@ function renderFeedback() {
     wl.title = WINPCT_HINT;
     wl.innerHTML =
       `<b>≈${u}% win</b> with your opening`
-      + (o != null ? ` <span style="color:#6f8597">· best pick = ${o}% win</span>` : "")
+      + (o != null ? ` <span style="color:var(--muted-2)">· best pick = ${o}% win</span>` : "")
       + `<br><span class="hint" style="margin:2px 0 0">${WINPCT_LABEL} — your win-% reflects how much your opening out-produces your opponent's.</span>`;
     div.appendChild(wl);
   }
@@ -1215,7 +1365,7 @@ function renderFeedback() {
   if (rb) div.appendChild(rb);
 
   const h = document.createElement("h3");
-  h.style.cssText = "color:#8aa0b3; font-size:12px; text-transform:uppercase; letter-spacing:.05em; margin:12px 0 4px";
+  h.style.cssText = "color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.05em; margin:12px 0 4px";
   h.textContent = "Solver's top picks";
   div.appendChild(h);
 
@@ -1226,8 +1376,8 @@ function renderFeedback() {
       .map((p) => `${spotName(p.settlement)} (${roadDir(p.settlement, p.road)})`)
       .join("  +  ");
     const mine = recMatchesChoice(rec, chosen)
-      ? `<span style="float:right; color:#9ed9ad; font-weight:600">(your choice)</span>` : "";
-    row.innerHTML = `${mine}<b>#${i + 1}</b> ${spots}<br><span style="color:#8aa0b3">${scoreLabel(rec)}</span>`;
+      ? `<span style="float:right; color:var(--choice); font-weight:600">(your choice)</span>` : "";
+    row.innerHTML = `${mine}<b>#${i + 1}</b> ${spots}<br><span style="color:var(--muted)">${scoreLabel(rec)}</span>`;
     row.onclick = () => {
       if (practiceSel !== rec) practiceReveal = null;  // changing pick hides the revealed line
       practiceSel = rec;
