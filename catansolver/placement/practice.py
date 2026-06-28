@@ -47,7 +47,7 @@ from catansolver.io.schema import (
     UnitGrade,
 )
 
-from .draft import PolicyFactory, _pick_road, default_policy, drive_to_user_decision
+from .draft import PolicyFactory, _pick_road, default_policy, drive_to_user_decision, opening_prior_policy
 from .heuristic import node_score
 from .optimize import _legal_settlements, recommend_opening
 
@@ -89,7 +89,7 @@ def _far(edge: Edge, node: int) -> int:
 def generate_puzzle(
     board: BoardState,
     seat: DraftSeat,
-    policy: PolicyFactory = default_policy,
+    policy: PolicyFactory = opening_prior_policy,
     seed: Optional[int] = None,
     rules: RulesConfig = COLONIST_1V1,
 ) -> OpeningPlacementRequest:

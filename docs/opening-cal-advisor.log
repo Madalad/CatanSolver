@@ -1,0 +1,17 @@
+advisor self-play opening samples: train=228 test=116 (1038s)
+
+                 Brier     ECE   meanP    base
+raw (test)      0.2105  0.0794   0.500   0.500
+recalibrated    0.2065  0.0554   0.500   0.500
+
+raw value -> calibrated win% (baseline vs advisor opponent):
+   raw   vs baseline   vs advisor
+  0.20            0%           0%
+  0.30           20%          13%
+  0.40           28%          32%
+  0.50           50%          50%
+  0.60           72%          68%
+  0.70           80%          87%
+  0.80          100%         100%
+
+saved -> docs/opening_calibrator_advisor.json

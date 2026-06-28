@@ -123,6 +123,34 @@ def test_ismcts_total_root_visits_match_iterations():
     assert sum(r.rollouts for r in recs) == 100
 
 
+def test_pimc_accepts_a_learned_value_model():
+    import numpy as np
+
+    from catansolver.learn import FEATURE_NAMES, train_logistic
+
+    rng = np.random.default_rng(0)
+    X = rng.normal(size=(60, len(FEATURE_NAMES)))
+    y = (X[:, 0] > 0).astype(float)  # depends on d_vp
+    vm = train_logistic(X, y)
+    recs = recommend_actions_pimc(_midgame_state(), n_determinizations=2, iterations=20,
+                                  rollout_depth=8, value_model=vm)
+    assert recs and all(0.0 <= r.win_prob <= 1.0 for r in recs)
+
+
+def test_pimc_depth_zero_is_pure_value_leaf():
+    import numpy as np
+
+    from catansolver.learn import FEATURE_NAMES, train_logistic
+
+    rng = np.random.default_rng(1)
+    X = rng.normal(size=(60, len(FEATURE_NAMES)))
+    vm = train_logistic(X, (X[:, 0] > 0).astype(float))
+    # rollout_depth=0 -> no rollout ticks, the value model evaluates the leaf directly
+    recs = recommend_actions_pimc(_midgame_state(), n_determinizations=2, iterations=20,
+                                  rollout_depth=0, value_model=vm)
+    assert recs and all(0.0 <= r.win_prob <= 1.0 for r in recs)
+
+
 def test_full_playout_simulation_is_binary():
     gs = _midgame_state()
     game = game_from_state(gs)

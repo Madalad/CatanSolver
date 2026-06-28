@@ -1,0 +1,12 @@
+timing accurate win-% for 3 FIRST candidates, 8 games each (advisor self-play)
+
+  node  7: win   88%  (87s for 8 games)
+  node 17: win   62%  (76s for 8 games)
+  node 18: win   75%  (124s for 8 games)
+
+~11.9s per self-play game (serial, measured)
+
+extrapolated C_board (K=15/seat x G=150 games x 3 seats):
+  serial:        22.4 hr/board
+  6 workers:     3.7 hr/board
+  -> 40-board bank @ 6 workers: 149 hr (6.2 days)

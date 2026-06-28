@@ -46,6 +46,7 @@ from catansolver.beliefs import (
 )
 from catansolver.engine import COLONIST_1V1, RulesConfig, game_from_state
 from catansolver.io.schema import ActionRecommendation, DevCards, GameState
+from catansolver.learn import extract_features
 from catansolver.placement.draft import rollout_policy
 from catansolver.placement.rollout import wilson_interval
 
@@ -69,10 +70,12 @@ def _leaf_value(game, root_player: Color, vps_to_win: int) -> float:
     return 1.0 / (1.0 + math.exp(-_LEAF_VP_SCALE * urgency * lead))
 
 
-def _simulate(game, root_player: Color, rollout_depth: Optional[int], vps_to_win: int) -> float:
+def _simulate(game, root_player: Color, rollout_depth: Optional[int], vps_to_win: int,
+              value_model=None) -> float:
     """Score a leaf for ``root_player`` in [0,1]. ``rollout_depth=None`` plays to a
     terminal (true win/loss, unbiased); an int truncates the playout at that many ticks
-    and falls back to the :func:`_leaf_value` heuristic — far cheaper, mildly biased."""
+    and evaluates the leaf with the learned ``value_model`` if given, else the
+    :func:`_leaf_value` VP-lead heuristic — far cheaper, mildly biased."""
     if rollout_depth is None:
         winner = game.play() if game.winning_color() is None else game.winning_color()
         return 1.0 if winner == root_player else 0.0
@@ -82,6 +85,8 @@ def _simulate(game, root_player: Color, rollout_depth: Optional[int], vps_to_win
         ticks += 1
     if game.winning_color() is not None:
         return 1.0 if game.winning_color() == root_player else 0.0
+    if value_model is not None:
+        return value_model(extract_features(game, root_player))
     return _leaf_value(game, root_player, vps_to_win)
 
 
@@ -142,7 +147,7 @@ def _ucb(node: _Node, child: _Node, root_player: Color, c: float) -> float:
 
 def _uct_search(root_game, root_player: Color, iterations: int, rng: random.Random,
                 c: float, max_depth: int, rollout_depth: Optional[int],
-                vps_to_win: int) -> _Node:
+                vps_to_win: int, value_model=None) -> _Node:
     """Run ``iterations`` of open-loop UCT from ``root_game`` (a fully-determinized,
     playable game) and return the root node with per-action statistics."""
     root = _Node(to_move=root_game.state.colors[root_game.state.current_player_index],
@@ -176,7 +181,7 @@ def _uct_search(root_game, root_player: Color, iterations: int, rng: random.Rand
             depth += 1
 
         # --- simulation: roll out (full or depth-truncated) and score for root ---
-        reward = _simulate(game, root_player, rollout_depth, vps_to_win)
+        reward = _simulate(game, root_player, rollout_depth, vps_to_win, value_model)
 
         # --- backpropagation ---
         while node is not None:
@@ -198,6 +203,7 @@ def recommend_actions_pimc(
     ucb_c: float = _DEFAULT_UCB_C,
     max_depth: int = 40,
     rollout_depth: Optional[int] = None,
+    value_model=None,
 ) -> List[ActionRecommendation]:
     """Rank the current player's legal actions by PIMC win rate, best first.
 
@@ -224,7 +230,7 @@ def recommend_actions_pimc(
                                dev_deck=det.dev_deck)
         me = game.state.colors[game.state.current_player_index]
         root = _uct_search(game, me, iterations, rng, ucb_c, max_depth,
-                           rollout_depth, gs.vps_to_win)
+                           rollout_depth, gs.vps_to_win, value_model)
         for action, child in root.children.items():
             key = (action.action_type.value, action.value)  # raw value is hashable
             entry = agg.setdefault(key, [0, 0.0])
@@ -250,7 +256,8 @@ def _ismcts_ucb(node: _Node, child: _Node, root_player: Color, c: float) -> floa
     return exploit + c * math.sqrt(math.log(child.avail) / child.visits)
 
 
-def _ismcts_iteration(root, game, root_player, rng, c, max_depth, rollout_depth, vps):
+def _ismcts_iteration(root, game, root_player, rng, c, max_depth, rollout_depth, vps,
+                      value_model=None):
     """One ISMCTS pass over the shared ``root`` tree, realised in this iteration's
     determinization ``game``: select (restricted to the moves legal in this world),
     expand, roll out, and back up along the visited path."""
@@ -275,7 +282,7 @@ def _ismcts_iteration(root, game, root_player, rng, c, max_depth, rollout_depth,
         node, depth = node.children[action], depth + 1
         path.append(node)
 
-    reward = _simulate(game, root_player, rollout_depth, vps)
+    reward = _simulate(game, root_player, rollout_depth, vps, value_model)
     for n in path:
         n.visits += 1
         n.wins_root += reward
@@ -303,6 +310,7 @@ def recommend_actions_ismcts(
     ucb_c: float = _DEFAULT_UCB_C,
     max_depth: int = 40,
     rollout_depth: Optional[int] = None,
+    value_model=None,
 ) -> List[ActionRecommendation]:
     """Rank the current player's legal actions by ISMCTS, best first.
 
@@ -338,7 +346,7 @@ def recommend_actions_ismcts(
         game = base.copy()
         _inject_determinization(game, opp_color, hand, deck)
         _ismcts_iteration(root, game, root_player, rng, ucb_c, max_depth,
-                          rollout_depth, gs.vps_to_win)
+                          rollout_depth, gs.vps_to_win, value_model)
 
     return _recs_from_children(
         (action.action_type.value, action.value, child.visits, child.wins_root)

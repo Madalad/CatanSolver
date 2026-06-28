@@ -296,6 +296,11 @@ class Recommendation(BaseModel):
     ci_low: Optional[float] = None  # Wilson 95% interval
     ci_high: Optional[float] = None
     rollouts: int = 0
+    # Calibrated learned-value opening win-% (P(user wins) vs an equal-strength bot),
+    # from the value model + advisor-level calibrator (docs/opening_calibrator_advisor.json).
+    # This is the trustworthy, honestly-labelled number the UI shows (Phase 5.2c); it
+    # supersedes the shelved rollout-vs-weak-bot estimate. None if the model is unavailable.
+    opening_win_prob: Optional[float] = None
 
 
 # --------------------------------------------------------------------------- #
@@ -358,3 +363,8 @@ class PracticeResult(BaseModel):
     all_correct: bool  # every piece was within the tolerance band (drives the streak)
     optimal_placements: List[Placement]  # the model line, for drawing on the board
     ranking: List[Recommendation]  # the solver's top recommendations (deeper context)
+    # Calibrated learned-value opening win-% (vs an equal-strength bot), filled in at the
+    # API boundary so the pure grader stays heuristic/instant (Phase 5.2c). ``user_win_prob``
+    # is for the placements the user submitted; ``optimal_win_prob`` for the model line.
+    user_win_prob: Optional[float] = None
+    optimal_win_prob: Optional[float] = None

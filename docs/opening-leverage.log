@@ -1,0 +1,10 @@
+how often the stronger-opening drafter wins (equal vs equal self-play)
+
+tier (equal vs equal)         N fav-win    95% CI mean gap   big-gap win
+random vs random            291      76%    70-80     0.20         93%   (15s)
+simple (WeightedRandom)     296      76%    70-80     0.18         90%   (14s)
+search (VictoryPoint)       297      70%    65-75     0.18         85%   (104s)
+learned-value (value@d0)     80      80%    70-87     0.16         96%   (488s)
+
+fav-win = win-% of the player who drafted the stronger opening (50% = opening doesn't matter)
+big-gap win = same, but only games in the top tercile of opening-strength gap

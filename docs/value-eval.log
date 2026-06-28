@@ -1,0 +1,9 @@
+40 games/matchup, workers=6, settings={'n_determinizations': 2, 'iterations': 25, 'rollout_depth': 10}
+
+value-leaf vs heuristic-leaf      26-14-0     65%  [ 50- 78]  
+
+value-leaf vs Random              34-5-1     85%  [ 71- 93]  SIG
+value-leaf vs WeightedRandom      32-6-2     80%  [ 65- 90]  SIG
+value-leaf vs VictoryPoint        31-9-0     78%  [ 62- 88]  SIG
+
+total 786s

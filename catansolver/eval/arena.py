@@ -55,12 +55,16 @@ class AdvisorPlayer(Player):
     """
 
     def __init__(self, color, n_determinizations=3, iterations=40, rollout_depth=12,
-                 method="pimc", rules: RulesConfig = COLONIST_1V1, is_bot=True):
+                 method="pimc", value_model=None, rules: RulesConfig = COLONIST_1V1, is_bot=True):
         super().__init__(color, is_bot)
         self.n_determinizations = n_determinizations
         self.iterations = iterations
         self.rollout_depth = rollout_depth
         self.method = method
+        if isinstance(value_model, str):  # a path; load the learned leaf evaluator
+            from catansolver.learn import ValueModel
+            value_model = ValueModel.load(value_model)
+        self.value_model = value_model
         self.rules = rules
         self._fallback = WeightedRandomPlayer(color)
         self._decisions = 0
@@ -88,6 +92,7 @@ class AdvisorPlayer(Player):
                     rollout_depth=self.rollout_depth,
                     rules=self.rules,
                     seed=self._decisions,
+                    value_model=self.value_model,
                 )
             else:
                 recs = recommend_actions_pimc(
@@ -97,6 +102,7 @@ class AdvisorPlayer(Player):
                     rollout_depth=self.rollout_depth,
                     rules=self.rules,
                     seed=self._decisions,
+                    value_model=self.value_model,
                 )
         finally:
             random.setstate(rng_state)

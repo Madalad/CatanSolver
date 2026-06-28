@@ -17,10 +17,11 @@ request degrades gracefully rather than crashing.
 
 from __future__ import annotations
 
+import random
 from collections import defaultdict
 from typing import Callable, Dict, List, Optional, Tuple
 
-from catanatron import Action, ActionType, Color
+from catanatron import Action, ActionType, Color, Player
 from catanatron.models.enums import ActionPrompt
 from catanatron.players.search import VictoryPointPlayer
 from catanatron.players.weighted_random import WeightedRandomPlayer
@@ -28,6 +29,8 @@ from catanatron.players.weighted_random import WeightedRandomPlayer
 from catansolver.engine import game_from_board
 from catansolver.engine.config import COLONIST_1V1, RulesConfig
 from catansolver.io.schema import DraftSeat, OpeningPlacementRequest
+
+from .heuristic import node_score
 
 Edge = Tuple[int, int]
 PolicyFactory = Callable[[Color], object]
@@ -47,6 +50,41 @@ def rollout_policy(color: Color):
     is calibrated against. Both players use it, so win-rates are "vs an even
     baseline" — see docs/heuristic-accuracy.md."""
     return WeightedRandomPlayer(color)
+
+
+class _TopOpeningPlayer(Player):
+    """Opening policy for *realistic* practice priors: place each initial settlement
+    among the top-N spots by the production heuristic (sensible but varied, so the user
+    practises against openings a real player might actually make), and the road toward
+    the best adjacent expansion. Only the initial build phase is ever driven by this."""
+
+    def __init__(self, color, top_n: int = 6, rng=None):
+        super().__init__(color)
+        self._top_n = top_n
+        self._rng = rng or random.Random()
+
+    def decide(self, game, playable_actions):
+        actions = list(playable_actions)
+        cmap = game.state.board.map
+        setts = [a for a in actions if a.action_type == ActionType.BUILD_SETTLEMENT]
+        if setts:
+            setts.sort(key=lambda a: node_score(cmap, a.value), reverse=True)
+            return self._rng.choice(setts[: max(1, self._top_n)])
+        roads = [a for a in actions if a.action_type == ActionType.BUILD_ROAD]
+        if roads:
+            settled = set(game.state.buildings_by_color[self.color].get("SETTLEMENT", []))
+            roads.sort(
+                key=lambda a: node_score(cmap, a.value[1] if a.value[0] in settled else a.value[0]),
+                reverse=True,
+            )
+            return roads[0]
+        return self._rng.choice(actions)
+
+
+def opening_prior_policy(color: Color):
+    """A competent, lightly-varied opening policy used to generate practice-puzzle priors
+    (top-N best spots), so the user never drills against moves no player would make."""
+    return _TopOpeningPlayer(color)
 
 
 def _pick_road(game, desired: Optional[Edge]) -> Action:

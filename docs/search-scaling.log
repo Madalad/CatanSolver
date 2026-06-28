@@ -1,0 +1,7 @@
+36 games/matchup, workers=6  (value@d0; default=2x25, big=2x300 iters)
+
+default vs VictoryPoint               27-7-2     75%  [ 59- 86]  SIG
+big vs VictoryPoint                   32-4-0     89%  [ 75- 96]  SIG
+big vs default (12x search)           23-12-1     64%  [ 48- 78]  
+
+total 2124s

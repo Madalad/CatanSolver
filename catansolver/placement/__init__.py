@@ -7,6 +7,7 @@ FIRST_FINAL (P1's last pick).
 
 from .draft import default_policy, drive_to_user_decision
 from .heuristic import best_initial_road, node_score, pair_score
+from .opening_value import opening_win_prob, opening_win_prob_gap
 from .optimize import recommend_opening
 from .practice import generate_puzzle, grade_practice
 from .rollout import estimate_win_prob, wilson_interval
@@ -24,4 +25,6 @@ __all__ = [
     "generate_puzzle",
     "grade_practice",
     "win_prob_estimate",
+    "opening_win_prob",
+    "opening_win_prob_gap",
 ]
