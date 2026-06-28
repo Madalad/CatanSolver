@@ -129,7 +129,8 @@ Two orthogonal axes: **how strong the decision engine is**, and **how the produc
 |---|---|---|---|
 | **Placement optimizer + interactive board UI** | High, shippable alone | Low–med | **MVP (Tier 1).** |
 | **Full turn advisor** | The core ask | Med–high | **Tier 2 — primary goal.** |
-| **Live Colonist.io coach** | High UX payoff | High, fragile | Separate sub-project (Phase 6). |
+| **Playable human-vs-bot game** | High UX payoff, shippable | Med (UI-heavy) | **Phase 6 — next/active.** |
+| ~~Live Colonist.io coach~~ | High UX payoff | High, fragile | **Dropped (likely ToS violation).** |
 | **Self-play research agent** | Learning/portfolio value | High | Stretch (Phase 5). |
 
 ---
@@ -315,8 +316,9 @@ pyproject.toml
 
 ## 7. Phased roadmap (chronological)
 
-Each phase has a clear deliverable and exit criteria; phases 1–4 are the committed core,
-5–6 are stretch.
+Each phase has a clear deliverable and exit criteria; phases 1–4 were the committed core
+(all complete), Phase 5 (learned play) is complete, and **Phase 6 — a playable human-vs-bot
+game — is the active next phase** (the original live-Colonist.io coach was dropped: ToS).
 
 ### Phase 0 — Foundations & de-risking  ✅ **complete (2026-06-14)**
 - **Tasks:** repo + tooling; **Catanatron spike** (2-player? VP config? where to inject Friendly Robber / discard-9? license?); finalise the 1v1 rules spec; design the JSON **state schema** (it doubles as the UI ↔ solver API contract).
@@ -374,15 +376,38 @@ Each phase has a clear deliverable and exit criteria; phases 1–4 are the commi
 - **Exit:** documented strength vs baselines; calibrated probabilities; reproducible benchmarks. **All three met** (Advisor 1701 Elo / +240; recalibrated ECE 0.047; tournament + calibration + recalibration harnesses with logs).
 - **Optional follow-ups (deferred 2026-06-21):** **4.3 Optuna tuning** of search/heuristic hyperparameters (compute-heavy, diminishing returns given the ~240-Elo lead); **4.4 board-UI integration** of the full turn advisor (mid-game state entry → ranked actions + calibrated win-prob, applying [docs/recalibration.json](docs/recalibration.json)). Neither blocks the exit; both can fold into Phase 5 / a later UI pass.
 
-### Phase 5 — Tier 3 learned play (stretch)
+### Phase 5 — Tier 3 learned play (stretch)  ✅ **5.1 + 5.2 complete (2026-06-25; exit met via depth-0); deep RL deferred (deps)**
 - **Tasks:** PPO/DQN baseline on the Gym env → learned value/policy as MCTS leaf-eval/prior (Approach D); optional AlphaZero-style self-play loop.
 - **Deliverable:** a stronger and/or faster advisor.
 - **Exit:** measurable win-rate improvement over Phase-4 search alone.
+- **Env constraint:** the venv has **only numpy** (no torch / sklearn / SB3 / gym, and installs are fragile here), so deep RL / AlphaZero are deferred. Pursued the same goal — a learned **value as MCTS leaf-eval (Approach D)** — with numpy.
+- **Done (5.1, 2026-06-22):** learned value pipeline (`catansolver/learn/`): 18-dim position **features** (me−opp diffs + game stage), **self-play data** generator (WeightedRandom, both-perspectives → balanced; cap raised after finding weak self-play runs 450–1600 actions), **numpy IRLS logistic value model** (`docs/value_model.json`, **0.765 held-out accuracy**), and integration as the PIMC/ISMCTS leaf evaluator (`value_model=` on `recommend_actions_*` / `AdvisorPlayer`). **A/B vs the VP-lead heuristic leaf:** at the default `rollout_depth=10` the value barely helps (n=100 **58%, not significant** — the rollout dominates the eval before the value is consulted). **The win is at `rollout_depth=0`** (5.1e): the value-only leaf is **3.8× faster** (37 vs 141 ms/decision) and — at equal iterations — **ties** heuristic@d10 (30-29-1, 50%); spend the freed time on ~3.6× more iterations and it **significantly beats** it (**38-20-2, 63%, CI 51–74**). **Phase-5 exit met.** Recommended config with a value model: `rollout_depth=0` + max iterations. Report [docs/learned-value.md](docs/learned-value.md); harnesses [scripts/train_value.py](scripts/train_value.py) / [evaluate_value.py](scripts/evaluate_value.py) / [evaluate_depth.py](scripts/evaluate_depth.py). **155 tests green** (+~25). Pipeline scaffolds a future deep net.
+- **Bigger levers (future):** a nonlinear value (GBT / small net) + a stronger data-generation policy than WeightedRandom — both need libs absent in this env.
+- **Done (5.2a/b, 2026-06-22) — opening win-% revisited:** the win-% shelved in Phase 4 (weak-bot calibration) is now produced from the **value model** (`catansolver/placement/opening_value.py`, `opening_win_prob`): drive the draft → play the candidate → finish the draft → value-model eval at the first PLAY position, averaged over completions, recalibrated. **Calibration study** ([scripts/calibrate_opening.py](scripts/calibrate_opening.py), `collect_opening_samples`): value model is **under-confident at openings** (opening matters more than it thinks) but monotonic, so isotonic recalibration gives **held-out ECE 0.093→0.040, base rate 0.50** → [docs/opening_calibrator.json](docs/opening_calibrator.json). Demo (FIRST seat): best spot **84.9%**, middle 64%, worst 61% — monotonic + well-spread. Cheap (one value eval/completion, no rollout). **Honest label required: vs a baseline-level opponent, not a human.** Report [docs/opening-winprob.md](docs/opening-winprob.md). **158 tests green.**
+- **Done (5.2c, 2026-06-25) — calibrated opening win-% in the UI:** the win-% is now surfaced in both surfaces, honestly labelled **"vs an equal-strength bot."**
+  - **Advisor-level recalibration (Approach A):** rebuilt the opening calibrator against an *equal-strength* opponent (value@d0 self-play) instead of WeightedRandom, via a parallelised collector (`collect_opening_samples_parallel`, ~12 min for 344 samples vs ~1 hr serial). Key finding: **openings are near coin-flips under equal play** — base rate and mean-pred both **0.500**, raw Brier **0.21** (barely better than the 0.25 of always-50%), i.e. *low resolution, not a compressed mapping*. The mapping itself moved little vs the baseline calibrator (recalibration ECE 0.079→0.055). Saved [docs/opening_calibrator_advisor.json](docs/opening_calibrator_advisor.json); log [docs/opening-cal-advisor.log](docs/opening-cal-advisor.log). This is the calibrator the API loads.
+  - **Board-bank idea (Approach B) — measured then shelved:** prototyped a precomputed "gold-standard" board bank ([scripts/board_bank_prototype.py](scripts/board_bank_prototype.py)). Measured **`C_board` = 3.7 hr/board** (6 workers; 6,750 games/board at 11.9 s/game value@d0), i.e. **6.2 days for a 40-board bank**. Rejected: Approach A already enables the feature on *any* board instantly, and since openings are ~50/50 there is little spread for B's extra precision to resolve. Documented for the record; revisit only for a curated "ranked openings" feature (and then 5–10 boards overnight, not 40).
+  - **Wiring:** [catansolver/api/app.py](catansolver/api/app.py) lazy-loads the opening win-% model and annotates `/api/recommend` (each pick's `opening_win_prob`, ~0.2 s each) and `/api/practice/grade` (`user_win_prob` vs `optimal_win_prob`), degrading gracefully if artifacts are absent. The board UI sorts recommendations by the calibrated win-% (headline) with the heuristic score as a secondary number, the practice feedback shows "your opening ≈X% · model's line ≈Y%," and the "Analyze" copy that promised a win-% "once the solver has its own strong bot" is fulfilled.
+- **Done (5.2d, 2026-06-25) — opening leverage + a better opening evaluator:** a leverage study ([scripts/opening_leverage.py](scripts/opening_leverage.py), [docs/opening-leverage.log](docs/opening-leverage.log)) measured how often the stronger-opening drafter wins in equal-vs-equal self-play: **~76% (random), 76% (simple), 70% (search), 80% (value@d0)** — opening advantage is **large and roughly skill-independent** (a clear out-draft wins ~85–96% at every tier), *not* the coin-flip the value model's low resolution had implied. That motivated mapping the **heuristic opening-strength gap** (my node-score sum − opponent's) straight to a win-%, which **beats the value model + calibrator** head-to-head on held-out self-play: **Brier 0.155 (WR) / 0.166 (equal-strength) vs 0.195 / 0.193** ([scripts/calibrate_opening_heuristic.py](scripts/calibrate_opening_heuristic.py), [docs/opening-heuristic-cal.log](docs/opening-heuristic-cal.log)). Why: at the opening the purpose-built production score out-predicts the general mid-game value model (which under-reacts to raw production). It must be the *gap*, not the absolute value (win-% is relative; differencing cancels board richness). Saved a 1-feature logistic [docs/opening_gap_model.json](docs/opening_gap_model.json) (gap +0.25→85%, −0.25→15%); `opening_win_prob_gap` is a drop-in and the API now uses it. Bonus: the win-% now tracks the ranking heuristic, so the displayed order and the win-% agree (no more value-model inversions). UI copy corrected (the old "openings are ~50/50" caption undersold the real leverage). **162 tests green** (+2).
 
-### Phase 6 — Colonist.io integration (stretch, separate sub-project)
-- **Tasks:** capture live state via **websocket reverse-engineering** (preferred — Colonist's log is structured) or **browser automation** (Playwright) as a fallback; map to our JSON schema; surface advice in near-real-time.
-- **Deliverable:** a live 1v1 coach.
-- **Exit:** captured state matches manual ground truth on real games. *(Note ToS/fair-use considerations before any real-match use.)*
+### Phase 6 — Playable human-vs-bot game  ◀ **next / active (planned 2026-06-25)**
+**Pivot (2026-06-25):** the original Phase 6 — a *live Colonist.io coach* via websocket reverse-engineering / Playwright capture — is **dropped** (likely ToS violation; user's call). Phase 6 is now a **self-contained 1v1 game the user plays against the bot in the browser, start to finish.** The two normally-hard parts already exist: the **rules engine** (Catanatron plays full 1v1 games — build, dev cards, robber, discard, longest road / largest army, 15 VP, friendly robber) and the **bot** (~1701 Elo, calibrated). The remaining work is a server game-loop + the interactive game UI.
+
+- **Scope decisions (user, 2026-06-25):**
+  - **No player-to-player (domestic) trading** — the fiddly negotiation part is cut, matching the project's long-standing "no domestic trade" stance (§9 Q1). **Bank/port maritime trades (4:1 / 3:1 / 2:1) are kept** — they're a single legal action with no negotiation and are essential to normal play (and keep ports meaningful). *(If "no trading of any kind" is preferred, it's a one-line toggle — confirm.)*
+  - **Bot always at max strength within a per-turn time budget** (no difficulty slider). **Measured** (value@d0 ISMCTS, opponent's hidden cards sampled): at **n_det=3, iter=100** a decision takes **~0.2 s median, <1 s worst**, a typical bot turn **<0.5 s**, a busy turn **~1–3 s** — comfortably within "a few seconds." Lock in the strongest measured config under that budget; optionally make the search **time-budgeted** later ("iterate until ~1.5 s") to always spend the full budget. The bot's opening placements are instant (fast draft fallback).
+  - **Minimum ~1 s per bot decision (deliberate pacing):** even when the search finishes faster (e.g. 0.2 s), the UI holds each bot action for **at least ~1 second** so the user can follow what the bot is doing. Implement as a floor (`max(think_time, 1 s)`) per surfaced bot action, not per turn — a multi-action bot turn then plays out as a readable sequence.
+
+- **Architecture:**
+  - **Server:** one in-memory `Game` per session. Endpoints — `POST /api/game/new`, `GET /api/game/{id}` (full state), `POST /api/game/{id}/action` (apply a human action); the server **runs the bot** (`AdvisorPlayer`) until it's the human's turn or a human input is required (discard on a 7). Legal moves come straight from Catanatron's `playable_actions`, so the UI just renders what's legal.
+  - **UI:** full-game board (buildings / roads / robber) + both player panels (VP, resource hand, dev cards, knights / longest road / largest army) + action controls (roll, build settlement/city/road, buy dev card, play dev card, move robber & steal, discard, end turn).
+
+- **Incremental steps:**
+  1. **Server game-session + bot loop + read-only full-state rendering** (start a game, see the live board + both panels; bot auto-plays its turns).
+  2. **Human turn loop:** roll → build (settlement / city / road) → buy / play dev card → robber & discard → end turn. *(Playable end-to-end after this step.)*
+  3. **Polish:** bank/port maritime trade actions, win screen, new-game flow, optional time-budgeted search.
+
+- **Exit:** a human can play a complete 1v1 game against the bot in the browser, with the bot responding within a few seconds per turn.
 
 ---
 
