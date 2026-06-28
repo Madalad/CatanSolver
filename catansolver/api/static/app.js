@@ -731,13 +731,13 @@ function drawHighlight(svg, pls, color) {
 // A shared "reveal rest of draft" toggle for a results list (advisor + practice). The accessor
 // closures read/write the list's selected and revealed rec; `redraw` re-renders. Reveals the
 // optimal line behind the selected pick (or the top one with a line); returns null if none has.
-function revealButton(list, getSel, setSel, getRev, setRev, redraw) {
+function revealButton(list, getSel, setSel, getRev, setRev, redraw, marginTop = 18) {
   if (!list.some((r) => r.continuation)) return null;
   const revealed = !!getRev();
   const btn = document.createElement("button");
   btn.textContent = revealed ? "Hide rest of draft" : "Reveal rest of draft";
-  btn.style.cssText = "margin:0 0 8px; font-size:12px; padding:3px 10px; cursor:pointer;"
-    + "border-radius:5px; border:1px solid #38465a; color:#e6edf3; background:"
+  btn.style.cssText = "margin:" + marginTop + "px 0 10px; font-size:16px; padding:8px 18px;"
+    + "cursor:pointer; border-radius:6px; border:1px solid #38465a; color:#e6edf3; background:"
     + (revealed ? "#2f6fc4" : "#1b2430") + ";";
   btn.onclick = () => {
     if (revealed) {
@@ -909,6 +909,8 @@ async function analyze() {
 
 function renderResults() {
   const div = $("results");
+  const slot = $("advisorRevealSlot");
+  if (slot) slot.replaceChildren();  // the reveal button lives above the "Recommendations" title
   const undo = $("undoAnalyze");
   if (undo) undo.disabled = !recs.length;  // only undoable once there's a result
   if (!recs.length) {
@@ -916,10 +918,10 @@ function renderResults() {
     return;
   }
   div.replaceChildren();
-  // "Reveal rest of draft" toggle above the list (acts on the selected recommendation).
+  // "Reveal rest of draft" toggle above the title (acts on the selected recommendation).
   const rb = revealButton(recs, () => selected, (v) => (selected = v),
-    () => advisorReveal, (v) => (advisorReveal = v), () => { render(); renderResults(); });
-  if (rb) div.appendChild(rb);
+    () => advisorReveal, (v) => (advisorReveal = v), () => { render(); renderResults(); }, 0);
+  if (rb && slot) slot.appendChild(rb);
   recs.forEach((r, i) => {
     const row = document.createElement("div");
     row.className = "rec" + (r === selected ? " sel" : "");
