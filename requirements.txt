@@ -1,0 +1,7 @@
+# Runtime dependencies for the CatanSolver web app.
+# Pinned to the versions developed against (see `pip freeze`).
+fastapi==0.128.8
+uvicorn==0.39.0
+pydantic==2.13.4
+numpy==2.0.2
+catanatron==3.2.1
