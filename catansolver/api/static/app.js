@@ -453,13 +453,43 @@ function draftRoads() {
 }
 
 // ---- editing ---------------------------------------------------------------
-function clickNode(n) {
+// A small, auto-dismissing hint that pops up next to the mouse cursor.
+function cursorHint(text, ev) {
+  let h = $("cursorHint");
+  if (!h) {
+    h = document.createElement("div");
+    h.id = "cursorHint";
+    h.style.cssText =
+      "position:fixed; z-index:1000; max-width:230px; padding:7px 10px; pointer-events:none;"
+      + "background:#1b2430; color:#e6edf3; border:1px solid #38465a; border-radius:6px;"
+      + "font-size:12px; line-height:1.4; box-shadow:0 2px 10px rgba(0,0,0,.45); opacity:0;"
+      + "transition:opacity .2s;";
+    document.body.appendChild(h);
+  }
+  h.textContent = text;
+  h.style.left = (ev.clientX + 14) + "px";
+  h.style.top = (ev.clientY + 16) + "px";
+  requestAnimationFrame(() => { h.style.opacity = "1"; });
+  clearTimeout(cursorHint._t);
+  cursorHint._t = setTimeout(() => { h.style.opacity = "0"; }, 2600);
+}
+
+function clickNode(n, ev) {
   if (mode === "practice") return clickNodePractice(n);
   // click a settlement already placed to remove it (and anything placed after)
   const idx = draftPieces.findIndex((x) => x.k === "S" && x.node === n.id);
   if (idx !== -1) { draftPieces.length = idx; render(); return; }
   const next = SEAT_PLAN[seat][draftPieces.length];
-  if (next && next.k === "S") { draftPieces.push({ p: next.p, k: "S", node: n.id }); render(); }
+  if (next && next.k === "S") { draftPieces.push({ p: next.p, k: "S", node: n.id }); render(); return; }
+  // "Going first" has no preexisting placements, so a click to place a piece is a mistake —
+  // nudge the user to switch seats if they meant to set up a board with pieces already down.
+  if (seat === "FIRST" && ev) {
+    cursorHint(
+      "Going first starts from an empty board — just click Analyze. To set up existing "
+      + "placements, change \"Your seat\" to Going second or First (final pick).",
+      ev,
+    );
+  }
 }
 
 function clickEdge(e) {
@@ -541,7 +571,7 @@ function render() {
   geom.nodes.forEach((n) => {
     const c = el("circle", { cx: n.x, cy: n.y, r: 5, fill: "#cdd9e5", stroke: "#0b1118", "stroke-width": 1 });
     c.style.cursor = "pointer";
-    c.onclick = () => clickNode(n);
+    c.onclick = (ev) => clickNode(n, ev);
     svg.appendChild(c);
   });
 
@@ -666,9 +696,10 @@ function drawHighlight(svg, pls, color) {
     if (n) {
       svg.appendChild(el("circle", { cx: n.x, cy: n.y, r: 13, fill: color, stroke: "#0b1118", "stroke-width": 2, "pointer-events": "none" }));
       const t = el("text", { x: n.x, y: n.y + 5, "text-anchor": "middle", "font-size": 13, "font-weight": "bold", fill: contrastInk(color), "pointer-events": "none" });
-      // Letters (A/B), not numbers — for the second player both go down together, so the
-      // label is just an identifier, not a ranking (see the going-second note in the panels).
-      t.textContent = pls.length > 1 ? String.fromCharCode(65 + i) : "★";
+      // Always the model-answer star, never a per-spot label: for the second player both
+      // settlements go down together, so any A/B or 1-2 marker reads as a misleading ranking.
+      // The going-second note in the panels explains that order doesn't matter.
+      t.textContent = "★";
       svg.appendChild(t);
     }
   });
@@ -862,9 +893,9 @@ const WINPCT_LABEL = "vs an equal-strength bot";
 // your opening hand (a card per adjacent hex of the settlement placed second) — the solver
 // doesn't weigh yet (planned for Phase 6, when the full-game bot can evaluate the hand).
 const SECOND_ORDER_NOTE =
-  "Going second: A &amp; B are placed together — the order isn't a ranking. Order only sets your "
-  + "opening hand (one card per adjacent hex of whichever is placed second), which the solver "
-  + "doesn't optimise yet.";
+  "Going second, both settlements are placed together, so the order shown isn't a ranking. Order "
+  + "only sets your opening hand (one card per adjacent hex of whichever is placed second), which "
+  + "the solver doesn't optimise yet.";
 
 function winPct(r) {
   return r && r.opening_win_prob != null ? Math.round(r.opening_win_prob * 100) : null;
@@ -1092,7 +1123,7 @@ function renderFeedback() {
   const n = USER_PIECES[r.seat];
   for (let i = 0; i < n; i++) {
     const s = sg(i), road = rg(i);
-    const head = n > 1 ? `Settlement ${String.fromCharCode(65 + i)}` : "Your placement";
+    const head = "Your placement";
     const block = document.createElement("div");
     block.className = "grade";
     block.innerHTML =

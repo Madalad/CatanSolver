@@ -157,6 +157,10 @@ def post_practice_grade(body: PracticeGradeBody) -> PracticeResult:
     result = grade_practice(body.request, body.placements)
     result.user_win_prob = _win_prob(body.request, body.placements)
     result.optimal_win_prob = _win_prob(body.request, result.optimal_placements)
+    # Annotate each of the solver's top picks with the same calibrated win-% the advisor
+    # shows, so the practice "top picks" list reads consistently with the advisor tab.
+    for rec in result.ranking:
+        rec.opening_win_prob = _win_prob(body.request, rec.placements)
     return result
 
 
