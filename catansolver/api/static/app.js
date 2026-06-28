@@ -992,6 +992,8 @@ function updatePracticeHint() {
   if (!puzzle) return;
   const h = $("practiceHint");
   const name = SEAT_NAME[puzzle.seat];
+  const clr = $("clearPlacement");
+  if (clr) clr.disabled = !!practiceResult;  // nothing to clear once the answer is graded
   if (practiceResult) { h.textContent = `${name} — review the answer, then start a new puzzle.`; return; }
   if (userPieces.length < piecesNeeded()) {
     h.textContent = `${name}: click a ${nextKind() === "S" ? "node for your settlement" : "edge for your road"}. (Click a placed piece to remove it.)`;
