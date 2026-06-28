@@ -7,12 +7,17 @@ const RES_COLOR = {
   WHEAT: "#e6b422", ORE: "#7e8a98", DESERT: "#e3d3a8",
 };
 const NUMS = [2, 3, 4, 5, 6, 8, 9, 10, 11, 12];
+// Port types: "3:1" is the generic any-resource port; the rest are 2:1 resource ports.
+const PORT_TYPES = ["3:1", "WOOD", "BRICK", "SHEEP", "WHEAT", "ORE"];
 const REQ_RES = { WOOD: 4, BRICK: 3, SHEEP: 4, WHEAT: 4, ORE: 3, DESERT: 1 };
 const REQ_NUM = { 2: 1, 3: 2, 4: 2, 5: 2, 6: 2, 8: 2, 9: 2, 10: 2, 11: 2, 12: 1 };
+const REQ_PORT = { "3:1": 4, WOOD: 1, BRICK: 1, SHEEP: 1, WHEAT: 1, ORE: 1 };
 const RED_NUMS = new Set([6, 8]);
 // dots under each token = number of ways to roll it (as on the real tokens)
 const PIPS = { 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 8: 5, 9: 4, 10: 3, 11: 2, 12: 1 };
-const PCOLOR = { P1: "#e0663f", P2: "#4da3ff" };
+// The four real Catan player colours; 1v1 defaults P1 = blue, P2 = white.
+const CATAN_COLORS = { red: "#cf3a36", orange: "#e2711d", blue: "#2f6fc4", white: "#f1efe6" };
+const PCOLOR = { P1: CATAN_COLORS.blue, P2: CATAN_COLORS.white };
 // Required existing placements (ordered S=settlement, R=road) before analysis, per seat.
 const SEAT_PLAN = {
   FIRST: [],
@@ -35,13 +40,20 @@ let seat = "FIRST";
 let editingHex = null;
 let hexEditRes = null;
 let hexEditNum = null;
+// port editor (advisor): node-pair key of the open port + its pending type selection
+let editingPort = null;
+let portEditType = null;
 let draftPieces = []; // advisor: ordered existing draft pieces [{p, k:"S"|"R", node|edge}]
 let recs = [];
 let selected = null;
 
 // practice state
 let puzzle = null;                          // OpeningPlacementRequest from the server
-let practiceScenario = "FIRST";             // chosen in the scenario modal
+let practiceScenario = null;                // seat chosen in the scenario modal (null = none yet)
+let practiceBoardMode = "random";           // "random" | "fixed" | "configure"
+let practiceFixedBoard = null;              // board reused for "fixed"/"configure" modes
+let buildingForPractice = false;            // user is building a board (on the advisor editor)
+let savedAdvisorBoard = null;               // advisor board stashed during a build, restored after
 let userPieces = [];                        // ordered [{k:"S",node} | {k:"R",edge}], S,R,S,R…
 let practiceResult = null;
 let practiceSel = null;                     // a ranking row the user clicked to inspect
@@ -65,10 +77,12 @@ async function init() {
   svg.setAttribute("viewBox", `0 0 ${geom.width} ${geom.height}`);
   buildPalette();
   buildHexEditor();
+  buildPortEditor();
   $("randomize").onclick = randomize;
   $("clear").onclick = clearBoard;
   $("seat").onchange = (e) => { seat = e.target.value; resetDraft(); render(); };
   $("analyze").onclick = analyze;
+  $("undoAnalyze").onclick = clearAnalysis;
   // tabs
   $("tabAdvisor").onclick = () => setMode("advisor");
   $("tabPractice").onclick = () => setMode("practice");
@@ -77,6 +91,11 @@ async function init() {
   $("hexClearOne").onclick = clearHexEdit;
   $("hexCancel").onclick = closeHexModal;
   $("hexModal").onclick = (e) => { if (e.target.id === "hexModal") closeHexModal(); };
+  // port editor modal
+  $("portApply").onclick = applyPortEdit;
+  $("portClearOne").onclick = clearPortEdit;
+  $("portCancel").onclick = closePortModal;
+  $("portModal").onclick = (e) => { if (e.target.id === "portModal") closePortModal(); };
   // analyze info modal
   $("analyzeInfo").onclick = () => $("infoModal").classList.remove("hidden");
   $("infoClose").onclick = () => $("infoModal").classList.add("hidden");
@@ -86,10 +105,17 @@ async function init() {
   $("submitPlacement").onclick = submitPlacement;
   $("clearPlacement").onclick = () => { startUserAttempt(); render(); renderFeedback(); };
   $("changeScenario").onclick = showScenarioModal;
-  $("resetScore").onclick = () => { score = { ...BASE_SCORE }; saveScore(); updateScoreboard(); };
+  $("resetScore").onclick = resetScore;
   document.querySelectorAll("#scenarioModal [data-seat]").forEach((b) => {
-    b.onclick = () => chooseScenario(b.dataset.seat);
+    b.onclick = () => selectSeat(b.dataset.seat);
   });
+  document.querySelectorAll("#scenarioModal [data-boardmode]").forEach((b) => {
+    b.onclick = () => selectBoardMode(b.dataset.boardmode);
+  });
+  $("startPractice").onclick = startPractice;
+  updateBoardModeButtons();
+  $("useInPractice").onclick = finishBoardBuild;
+  $("cancelBuild").onclick = cancelBoardBuild;
   $("scenarioModal").onclick = (e) => { if (e.target.id === "scenarioModal" && puzzle) hideScenarioModal(); };
   updateScoreboard();
   await loadClearBoard();
@@ -99,24 +125,117 @@ async function init() {
 async function loadClearBoard() {
   board = await (await fetch("/api/board/random")).json();
   board.hexes.forEach((h) => { h.resource = null; h.number = null; });
+  board.ports.forEach((p) => { p.type = null; });
   resetDraft();
   render();
 }
 
 // ---- scenario modal --------------------------------------------------------
-function showScenarioModal() { $("scenarioModal").classList.remove("hidden"); }
+function showScenarioModal() {
+  updateBoardModeButtons();
+  updateSeatButtons();
+  updateBoardOptions();
+  updateStartButton();
+  $("scenarioModal").classList.remove("hidden");
+}
 function hideScenarioModal() { $("scenarioModal").classList.add("hidden"); }
 
-async function chooseScenario(seatChoice) {
-  practiceScenario = seatChoice;
+function selectSeat(s) {
+  practiceScenario = s;
+  updateSeatButtons();
+  updateBoardOptions();
+  updateStartButton();
+}
+
+// "Fixed board" is pointless for "Going first" — with no opponent priors it's the same
+// puzzle every time — so disable it for that seat, falling back to random if it was chosen.
+function updateBoardOptions() {
+  const fixedBtn = document.querySelector('#scenarioModal [data-boardmode="fixed"]');
+  const disableFixed = practiceScenario === "FIRST";
+  if (fixedBtn) fixedBtn.disabled = disableFixed;
+  if (disableFixed && practiceBoardMode === "fixed") {
+    practiceBoardMode = "random";
+    updateBoardModeButtons();
+  }
+}
+
+function updateSeatButtons() {
+  document.querySelectorAll("#scenarioModal [data-seat]").forEach((b) =>
+    b.classList.toggle("active", b.dataset.seat === practiceScenario)
+  );
+}
+
+// Start is enabled once a board mode and a scenario are both chosen.
+function updateStartButton() {
+  $("startPractice").disabled = !(practiceBoardMode && practiceScenario);
+}
+
+// Begin practice with the chosen board mode + seat. "configure" (with no board built yet)
+// launches the board builder first; the puzzle then starts when the user finishes building.
+function startPractice() {
+  if (!practiceScenario) return;
+  // reconfiguring an existing session (via Change) starts a fresh scoreboard
+  if (puzzle) resetScore();
+  if (practiceBoardMode === "configure" && !practiceFixedBoard) { startBoardBuild(); return; }
   hideScenarioModal();
-  await newPuzzle();
+  newPuzzle();
+}
+
+function updateBoardModeButtons() {
+  document.querySelectorAll("#scenarioModal [data-boardmode]").forEach((b) =>
+    b.classList.toggle("active", b.dataset.boardmode === practiceBoardMode)
+  );
+}
+
+// Board choice in the practice menu: random (fresh each puzzle), fixed (one random board
+// reused), or configure (build your own). "configure" launches the board builder.
+function selectBoardMode(m) {
+  practiceBoardMode = m;
+  // any explicit board choice starts fresh: "random" never reuses a board; "fixed"/"configure"
+  // (re)acquire one on Start / when the build finishes.
+  practiceFixedBoard = null;
+  updateBoardModeButtons();
+  updateStartButton();
+}
+
+// Build-your-own-board: reuse the advisor tab's full editor. Stash the advisor board, drop
+// in a random board to tweak, and show a banner with "Use in practice".
+async function startBoardBuild() {
+  practiceBoardMode = "configure";
+  buildingForPractice = true;
+  hideScenarioModal();
+  savedAdvisorBoard = board;
+  board = await (await fetch("/api/board/random")).json();  // a valid base to edit
+  resetDraft();
+  setMode("advisor");
+}
+
+async function finishBoardBuild() {
+  const issues = validateBoard();
+  if (issues.length) { alert("Board not valid:\n  " + issues.join("\n  ")); return; }
+  practiceFixedBoard = JSON.parse(JSON.stringify(board));  // lock the built board
+  buildingForPractice = false;
+  if (savedAdvisorBoard) { board = savedAdvisorBoard; savedAdvisorBoard = null; resetDraft(); }
+  await setMode("practice", true);  // back to practice without re-opening the menu
+  await newPuzzle();                // first puzzle on the built board
+}
+
+function cancelBoardBuild() {
+  buildingForPractice = false;
+  if (savedAdvisorBoard) { board = savedAdvisorBoard; savedAdvisorBoard = null; resetDraft(); }
+  setMode("practice", true);
+  showScenarioModal();
 }
 
 // --------------------------------------------------------------------------- //
 // Mode switching
 // --------------------------------------------------------------------------- //
-async function setMode(m) {
+async function setMode(m, skipMenu) {
+  // leaving a board-build (e.g. via the tab) abandons it and restores the advisor board
+  if (buildingForPractice && m !== "advisor") {
+    buildingForPractice = false;
+    if (savedAdvisorBoard) { board = savedAdvisorBoard; savedAdvisorBoard = null; resetDraft(); }
+  }
   mode = m;
   $("tabAdvisor").classList.toggle("active", m === "advisor");
   $("tabPractice").classList.toggle("active", m === "practice");
@@ -124,7 +243,8 @@ async function setMode(m) {
   $("advisorResults").classList.toggle("hidden", m !== "advisor");
   $("practiceControls").classList.toggle("hidden", m !== "practice");
   $("practiceResults").classList.toggle("hidden", m !== "practice");
-  if (m === "practice") { showScenarioModal(); return; }
+  $("practiceBuildBar").classList.toggle("hidden", !(m === "advisor" && buildingForPractice));
+  if (m === "practice" && !skipMenu) { showScenarioModal(); return; }
   render();
 }
 
@@ -240,6 +360,57 @@ function clearHexEdit() {
   render();
 }
 
+// ---- port editor (click a port to set its type) ----------------------------
+// Ports sit at fixed board edges (their node pair never changes); only the trade
+// type is editable. Keyed by the sorted node pair so geometry and board agree.
+function portKey(nodes) { return [...nodes].sort((a, b) => a - b).join("-"); }
+
+function buildPortEditor() {
+  PORT_TYPES.forEach((t) => {
+    const generic = t === "3:1";
+    const b = document.createElement("button");
+    b.textContent = generic ? "3:1" : t[0] + t.slice(1).toLowerCase();
+    b.style.background = generic ? "#eef1f5" : RES_COLOR[t];
+    b.style.color = "#0b1118";
+    b.dataset.port = t;
+    b.onclick = () => { portEditType = t; updatePortHighlights(); };
+    $("portTypeChoices").appendChild(b);
+  });
+}
+
+function updatePortHighlights() {
+  document.querySelectorAll("#portTypeChoices [data-port]").forEach((b) =>
+    b.classList.toggle("active", b.dataset.port === portEditType)
+  );
+}
+
+function openPortEditor(gp) {
+  if (mode !== "advisor") return;
+  const key = portKey([gp.a, gp.b]);
+  const port = board.ports.find((p) => portKey(p.nodes) === key);
+  if (!port) return;
+  editingPort = key;
+  portEditType = port.type || null;
+  updatePortHighlights();
+  $("portModal").classList.remove("hidden");
+}
+
+function closePortModal() { editingPort = null; $("portModal").classList.add("hidden"); }
+
+function applyPortEdit() {
+  const port = board.ports.find((p) => portKey(p.nodes) === editingPort);
+  if (port && portEditType) port.type = portEditType;
+  closePortModal();
+  render();
+}
+
+function clearPortEdit() {
+  const port = board.ports.find((p) => portKey(p.nodes) === editingPort);
+  if (port) port.type = null;
+  closePortModal();
+  render();
+}
+
 async function randomize() {
   board = await (await fetch("/api/board/random")).json();
   resetDraft();
@@ -248,6 +419,7 @@ async function randomize() {
 
 function clearBoard() {
   board.hexes.forEach((h) => { h.resource = null; h.number = null; });
+  board.ports.forEach((p) => { p.type = null; });
   resetDraft();
   render();
 }
@@ -256,6 +428,15 @@ function resetDraft() {
   draftPieces = [];
   recs = [];
   selected = null;
+  renderResults();
+}
+
+// Remove just the Analyze result (the recommendations + on-board highlight), keeping the
+// board and draft pieces so the user can tweak and re-analyze without starting over.
+function clearAnalysis() {
+  recs = [];
+  selected = null;
+  render();
   renderResults();
 }
 
@@ -355,21 +536,8 @@ function render() {
     svg.appendChild(hit);
   });
 
-  drawPorts(svg, b);
-
-  if (mode === "advisor") {
-    drawPieces(svg, draftSettlements(), draftRoads());
-    if (selected) drawHighlight(svg, selected.placements, "#ffd23f");
-  } else if (puzzle) {
-    drawPieces(svg, puzzle.settlements || {}, puzzle.roads || {});       // the given priors
-    drawPieces(svg, { P1: userSettlements() }, { P1: userRoads() });      // the user's answer
-    if (practiceResult) {
-      drawHighlight(svg, practiceResult.optimal_placements, "#ffd23f");
-      if (practiceSel) drawHighlight(svg, practiceSel.placements, "#35d0e0");
-      drawGradeMarks(svg);
-    }
-  }
-
+  // Interactive node dots — drawn *before* the pieces so a placed house covers its dot
+  // yet stays clickable to remove (pieces are pointer-events:none, so clicks fall through).
   geom.nodes.forEach((n) => {
     const c = el("circle", { cx: n.x, cy: n.y, r: 5, fill: "#cdd9e5", stroke: "#0b1118", "stroke-width": 1 });
     c.style.cursor = "pointer";
@@ -377,33 +545,86 @@ function render() {
     svg.appendChild(c);
   });
 
+  drawPorts(svg, b);
+
+  if (mode === "advisor") {
+    drawPieces(svg, draftSettlements(), draftRoads());
+    if (selected) drawHighlight(svg, selected.placements, PCOLOR[userColor()]);
+  } else if (puzzle) {
+    drawPieces(svg, puzzle.settlements || {}, puzzle.roads || {});       // the given priors
+    drawPieces(svg, { P1: userSettlements() }, { P1: userRoads() });      // the user's answer
+    if (practiceResult) {
+      drawHighlight(svg, practiceResult.optimal_placements, PCOLOR[userColor()]);
+      if (practiceSel) drawHighlight(svg, practiceSel.placements, "#35d0e0");
+      drawGradeMarks(svg);
+    }
+  }
+
   if (mode === "advisor") { updateStatus(); updateHint(); markActive(); }
   else { updatePracticeHint(); }
 }
 
 function drawPorts(svg, b) {
   const typeByPair = {};
-  b.ports.forEach((p) => (typeByPair[[...p.nodes].sort((a, x) => a - x).join("-")] = p.type));
+  b.ports.forEach((p) => (typeByPair[portKey(p.nodes)] = p.type));
   const nodeById = {};
   geom.nodes.forEach((n) => (nodeById[n.id] = n));
   geom.ports.forEach((gp) => {
-    const type = typeByPair[[gp.a, gp.b].sort((a, x) => a - x).join("-")] || "?";
+    const type = typeByPair[portKey([gp.a, gp.b])] || null;
+    const empty = !type;
     const generic = type === "3:1";
-    // 3:1 ports are near-white so they're distinct from the (grey) ore ports.
-    const color = generic ? "#eef1f5" : RES_COLOR[type] || "#7c8a98";
+    // empty ports show as a dim slot (consistent with the empty hexes); 3:1 ports are
+    // near-white so they're distinct from the (grey) ore ports.
+    const color = empty ? "#2c3c4d" : generic ? "#eef1f5" : RES_COLOR[type] || "#7c8a98";
     // "docks": lines from the port marker to the two settlement spots it serves
     [gp.a, gp.b].forEach((nid) => {
       const n = nodeById[nid];
       if (n) svg.appendChild(el("line", {
         x1: gp.x, y1: gp.y, x2: n.x, y2: n.y,
-        stroke: color, "stroke-width": 3, "stroke-linecap": "round", opacity: 0.85,
+        stroke: empty ? "#3a4b5c" : color, "stroke-width": 3, "stroke-linecap": "round",
+        opacity: empty ? 0.5 : 0.85, "pointer-events": "none",
       }));
     });
-    svg.appendChild(el("circle", { cx: gp.x, cy: gp.y, r: 12, fill: color, stroke: "#0b1118", "stroke-width": 1.5 }));
-    const t = el("text", { x: gp.x, y: gp.y + 4, "text-anchor": "middle", "font-size": 10, "font-weight": "bold", fill: "#0b1118" });
-    t.textContent = generic ? "3:1" : type[0];
-    svg.appendChild(t);
+    const marker = el("circle", { cx: gp.x, cy: gp.y, r: 12, fill: color, stroke: "#0b1118", "stroke-width": 1.5 });
+    if (mode === "advisor") {
+      marker.style.cursor = "pointer";
+      marker.onclick = () => openPortEditor(gp);
+    }
+    svg.appendChild(marker);
+    if (!empty) {
+      const t = el("text", {
+        x: gp.x, y: gp.y + 4, "text-anchor": "middle", "font-size": 10, "font-weight": "bold",
+        fill: "#0b1118", "pointer-events": "none",
+      });
+      t.textContent = generic ? "3:1" : type[0];
+      svg.appendChild(t);
+    }
   });
+}
+
+// A classic Catan settlement: a little house (square body + triangular roof), centred
+// on (cx, cy), with a dark outline + eave line so it reads as a building (and white
+// pieces stay visible).
+function drawSettlement(svg, cx, cy, color) {
+  const w = 9, body = 8, eaveDy = -3, peakDy = -12;
+  const pts = [
+    [cx, cy + peakDy], [cx + w, cy + eaveDy], [cx + w, cy + body],
+    [cx - w, cy + body], [cx - w, cy + eaveDy],
+  ].map((q) => q.join(",")).join(" ");
+  svg.appendChild(el("polygon", {
+    points: pts, fill: color, stroke: "#0b1118", "stroke-width": 1.6,
+    "stroke-linejoin": "round", "pointer-events": "none",
+  }));
+  svg.appendChild(el("line", {
+    x1: cx - w, y1: cy + eaveDy, x2: cx + w, y2: cy + eaveDy,
+    stroke: "#0b1118", "stroke-width": 1, opacity: 0.45, "pointer-events": "none",
+  }));
+}
+
+// A Catan road: a dark casing under the player colour, so it stands out (esp. white).
+function drawRoad(svg, e, color) {
+  svg.appendChild(el("line", { x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2, stroke: "#0b1118", "stroke-width": 10, "stroke-linecap": "round", "pointer-events": "none" }));
+  svg.appendChild(el("line", { x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2, stroke: color, "stroke-width": 6, "stroke-linecap": "round", "pointer-events": "none" }));
 }
 
 // Draw settlements + roads grouped by player colour. settObj/roadObj: {player: [...]}.
@@ -411,15 +632,29 @@ function drawPieces(svg, settObj, roadObj) {
   for (const p in roadObj) {
     (roadObj[p] || []).forEach(([a, b]) => {
       const e = findEdge(a, b);
-      if (e) svg.appendChild(el("line", { x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2, stroke: PCOLOR[p] || "#888", "stroke-width": 7, "stroke-linecap": "round", "pointer-events": "none" }));
+      if (e) drawRoad(svg, e, PCOLOR[p] || "#888");
     });
   }
   for (const p in settObj) {
     (settObj[p] || []).forEach((nid) => {
       const n = geom.nodes.find((x) => x.id === nid);
-      if (n) svg.appendChild(el("rect", { x: n.x - 8, y: n.y - 8, width: 16, height: 16, fill: PCOLOR[p] || "#888", stroke: "#0b1118", "stroke-width": 2 }));
+      if (n) drawSettlement(svg, n.x, n.y, PCOLOR[p] || "#888");
     });
   }
+}
+
+// Which player the on-board solution belongs to (so it shows in that player's colour):
+// the user goes second (P2) only for the SECOND seat, otherwise first (P1).
+function userColor() {
+  if (mode === "practice") return (puzzle && puzzle.user_color) || "P1";
+  return seat === "SECOND" ? "P2" : "P1";
+}
+
+// Pick a legible ink (dark on light fills, light on dark fills) for text on a marker.
+function contrastInk(hex) {
+  const c = hex.replace("#", "");
+  const r = parseInt(c.slice(0, 2), 16), g = parseInt(c.slice(2, 4), 16), b = parseInt(c.slice(4, 6), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.55 ? "#0b1118" : "#f5f5f0";
 }
 
 // Highlight a list of {settlement, road} placements in `color` (recommendation / model line).
@@ -429,8 +664,8 @@ function drawHighlight(svg, pls, color) {
     if (e) svg.appendChild(el("line", { x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2, stroke: color, "stroke-width": 8, "stroke-linecap": "round", opacity: 0.85, "pointer-events": "none" }));
     const n = geom.nodes.find((x) => x.id === pl.settlement);
     if (n) {
-      svg.appendChild(el("circle", { cx: n.x, cy: n.y, r: 13, fill: color, stroke: "#0b1118", "stroke-width": 2 }));
-      const t = el("text", { x: n.x, y: n.y + 5, "text-anchor": "middle", "font-size": 13, "font-weight": "bold", fill: "#222" });
+      svg.appendChild(el("circle", { cx: n.x, cy: n.y, r: 13, fill: color, stroke: "#0b1118", "stroke-width": 2, "pointer-events": "none" }));
+      const t = el("text", { x: n.x, y: n.y + 5, "text-anchor": "middle", "font-size": 13, "font-weight": "bold", fill: contrastInk(color), "pointer-events": "none" });
       t.textContent = pls.length > 1 ? i + 1 : "★";
       svg.appendChild(t);
     }
@@ -443,7 +678,30 @@ function drawGradeMarks(svg) {
     const col = g.correct ? "#56d364" : "#f0883e";
     if (g.kind === "settlement" && g.chosen_node != null) {
       const n = geom.nodes.find((x) => x.id === g.chosen_node);
-      if (n) svg.appendChild(el("circle", { cx: n.x, cy: n.y, r: 11, fill: "none", stroke: col, "stroke-width": 3 }));
+      if (n) {
+        svg.appendChild(el("circle", { cx: n.x, cy: n.y, r: 11, fill: "none", stroke: col, "stroke-width": 3, "pointer-events": "none" }));
+        // tick (correct) / cross (off) in the ring's colour, with a thin dark outline so it
+        // reads against light hexes. Normally directly below the ring, but if a road slot
+        // runs straight down from the spot, shift it 120° from north (down-right) to clear it
+        // (the open gap between the down road and the up-right road).
+        const r = 19, ang = (2 * Math.PI) / 3;  // 120° from vertical north, clockwise
+        const downRoad = geom.edges.some((e) => {
+          if (e.a !== n.id && e.b !== n.id) return false;
+          const swap = Math.hypot(e.x1 - n.x, e.y1 - n.y) > Math.hypot(e.x2 - n.x, e.y2 - n.y);
+          const dx = (swap ? e.x1 : e.x2) - n.x, dy = (swap ? e.y1 : e.y2) - n.y;
+          return dy > 0 && Math.abs(dx) < Math.abs(dy) * 0.3;  // ~vertical, pointing down
+        });
+        const mx = downRoad ? n.x + r * Math.sin(ang) : n.x;
+        const my = downRoad ? n.y - r * Math.cos(ang) : n.y + r;
+        const mark = el("text", {
+          x: mx, y: my, "text-anchor": "middle", "dominant-baseline": "central",
+          "font-size": 12, "font-weight": "bold", fill: col,
+          stroke: "#0b1118", "stroke-width": 2, "paint-order": "stroke",
+          "stroke-linejoin": "round", "pointer-events": "none",
+        });
+        mark.textContent = g.correct ? "✓" : "✗";
+        svg.appendChild(mark);
+      }
     } else if (g.kind === "road" && g.chosen_edge) {
       const e = findEdge(g.chosen_edge[0], g.chosen_edge[1]);
       if (e) svg.appendChild(el("line", { x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2, stroke: col, "stroke-width": 3, "stroke-dasharray": "4 3", "pointer-events": "none" }));
@@ -481,6 +739,18 @@ function validateBoard() {
     if (RED_NUMS.has(num[a]) && RED_NUMS.has(num[b])) redPairs++;
   });
   if (redPairs) issues.push(`${redPairs} adjacent red 6/8 pair(s)`);
+
+  // Ports: each must be set, then composition (4 generic 3:1 + one 2:1 per resource).
+  const emptyPorts = (board.ports || []).filter((p) => !p.type).length;
+  if (emptyPorts) {
+    issues.push(`${emptyPorts} port(s) not set`);
+  } else {
+    const pc = {};
+    board.ports.forEach((p) => (pc[p.type] = (pc[p.type] || 0) + 1));
+    for (const t in REQ_PORT) if ((pc[t] || 0) !== REQ_PORT[t]) {
+      issues.push(`port ${t} ${(pc[t] || 0)}/${REQ_PORT[t]}`);
+    }
+  }
   return issues;
 }
 
@@ -529,7 +799,7 @@ async function analyze() {
     const body = {
       request: buildRequest(),
       top_k: 6,
-      n_rollouts: 0, // win-% display shelved; rank by heuristic only (see docs/heuristic-accuracy.md)
+      n_rollouts: 0, // heuristic pre-ranking; win-% comes from the value model (win_prob: true by default)
     };
     const resp = await fetch("/api/recommend", {
       method: "POST",
@@ -537,7 +807,7 @@ async function analyze() {
       body: JSON.stringify(body),
     });
     if (!resp.ok) { alert("Solver error:\n" + (await resp.text()).slice(0, 500)); return; }
-    recs = await resp.json();
+    recs = rankedForDisplay(await resp.json()); // headline by calibrated win-%
     selected = recs[0] || null;
     render();
     renderResults();
@@ -549,6 +819,8 @@ async function analyze() {
 
 function renderResults() {
   const div = $("results");
+  const undo = $("undoAnalyze");
+  if (undo) undo.disabled = !recs.length;  // only undoable once there's a result
   if (!recs.length) {
     div.innerHTML = '<p class="hint">Build a board and click Analyze.</p>';
     return;
@@ -560,18 +832,41 @@ function renderResults() {
     const spots = r.placements
       .map((p) => `${spotName(p.settlement)} (${roadDir(p.settlement, p.road)})`)
       .join("  +  ");
-    row.innerHTML = `<b>#${i + 1}</b> ${spots}<br><span style="color:#8aa0b3" title="${SCORE_HINT}">${scoreLabel(r)}</span>`;
+    row.innerHTML = `<b>#${i + 1}</b> ${spots}<br><span style="color:#8aa0b3">${scoreLabel(r)}</span>`;
     row.onclick = () => { selected = r; render(); renderResults(); };
     div.appendChild(row);
   });
 }
 
-// Recommendations are ranked by the heuristic score (higher = better). A win-%
-// display was trialled but shelved — vs the only available (weak) bot it read ~96%
-// where strong humans win ~44%, which would mislead. See docs/heuristic-accuracy.md.
-const SCORE_HINT = "Relative strength score (higher = better) — production-weighted, with diversity and ports. A comparative ranking, not a win probability.";
+// Each recommendation carries two numbers: the calibrated **opening win-%** from the
+// learned value model — P(you win) vs an equal-strength bot, the honest figure Phase 5.2
+// unlocked — and the heuristic **strength score** that pre-ranks the candidates. The win-%
+// is the headline and we sort by it when present (the value model is the better evaluator,
+// so it can order picks differently from the score); we fall back to score order when the
+// model is unavailable. The earlier shelved win-% was a rollout-vs-weak-bot figure (~96%
+// where strong humans win ~44%); this one is calibrated against equal-strength self-play.
+const SCORE_HINT = "Strength score (higher = better) — production-weighted, with diversity and ports. Pre-ranks the candidates; the win-% maps this to a calibrated probability.";
+const WINPCT_HINT = "Calibrated opening win probability — P(you win) vs an equal-strength bot. It maps how much your opening out-produces your opponent's onto a win-%, calibrated on self-play. A balanced opening is ~50/50, but a clearly stronger one wins ~85% even against an equal opponent (and ~equally at every skill level we tested). The old weak-bot ~96% was an illusion.";
+const WINPCT_LABEL = "vs an equal-strength bot";
+
+function winPct(r) {
+  return r && r.opening_win_prob != null ? Math.round(r.opening_win_prob * 100) : null;
+}
+
+// Sort a recommendation list for display: by calibrated win-% when any is present,
+// else by the heuristic score. Returns a new array (references preserved for `sel`).
+function rankedForDisplay(list) {
+  const haveWin = list.some((r) => r.opening_win_prob != null);
+  return [...list].sort((a, b) =>
+    haveWin ? (winPct(b) ?? -1) - (winPct(a) ?? -1) : b.heuristic_score - a.heuristic_score
+  );
+}
+
 function scoreLabel(r) {
-  return `score ${r.heuristic_score.toFixed(2)}`;
+  const wp = winPct(r);
+  if (wp == null) return `<span title="${SCORE_HINT}">score ${r.heuristic_score.toFixed(2)}</span>`;
+  return `<span title="${WINPCT_HINT}"><b style="color:#cfe3d2">≈${wp}%</b> <span style="color:#6f8597">${WINPCT_LABEL}</span></span>`
+    + ` <span style="color:#6f8597" title="${SCORE_HINT}">· score ${r.heuristic_score.toFixed(2)}</span>`;
 }
 
 // --------------------------------------------------------------------------- //
@@ -581,16 +876,23 @@ async function newPuzzle() {
   const btn = $("newPuzzle");
   btn.disabled = true;
   try {
+    const body = { seat: practiceScenario };
+    // "fixed"/"configure" reuse one board; "random" gets a fresh board each puzzle
+    if (practiceBoardMode !== "random" && practiceFixedBoard) body.board = practiceFixedBoard;
     const resp = await fetch("/api/practice/new", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ seat: practiceScenario }),
+      cache: "no-store",
+      body: JSON.stringify(body),
     });
     if (!resp.ok) { alert("Could not generate puzzle:\n" + (await resp.text()).slice(0, 500)); return; }
     puzzle = await resp.json();
+    if (practiceBoardMode === "fixed") practiceFixedBoard = puzzle.board;  // lock the first random board
     startUserAttempt();
-    const label = practiceScenario === "RANDOM" ? `${SEAT_NAME[puzzle.seat]} 🎲` : SEAT_NAME[puzzle.seat];
-    $("scenarioLabel").textContent = label;
+    const seatLabel = practiceScenario === "RANDOM" ? `${SEAT_NAME[puzzle.seat]} 🎲` : SEAT_NAME[puzzle.seat];
+    const tag = practiceBoardMode === "configure" ? " · ✏️ your board"
+      : practiceBoardMode === "fixed" ? " · 📌 fixed board" : "";
+    $("scenarioLabel").textContent = seatLabel + tag;
     render();
     renderFeedback();
   } finally {
@@ -603,6 +905,8 @@ function startUserAttempt() {
   userPieces = [];
   practiceResult = null;
   practiceSel = null;
+  const sb = $("submitPlacement");
+  if (sb) sb.disabled = false;  // a fresh attempt can be submitted again
 }
 
 const SEAT_NAME = { FIRST: "Going first", SECOND: "Going second", FIRST_FINAL: "First player's final pick" };
@@ -628,6 +932,9 @@ function clickEdgePractice(e) {
   const idx = userPieces.findIndex((p) => p.k === "R" && sameEdge(p.edge, [e.a, e.b]));
   if (idx !== -1) { userPieces.length = idx; render(); return; }
   if (userPieces.length < piecesNeeded() && nextKind() === "R") {
+    // an initial road must connect to the settlement just placed for this pair
+    const lastSettlement = [...userPieces].reverse().find((p) => p.k === "S");
+    if (!lastSettlement || (e.a !== lastSettlement.node && e.b !== lastSettlement.node)) return;
     userPieces.push({ k: "R", edge: [e.a, e.b] });
     render();
   }
@@ -646,7 +953,7 @@ function updatePracticeHint() {
 }
 
 async function submitPlacement() {
-  if (!puzzle) return;
+  if (!puzzle || practiceResult) return;  // nothing to do, or already graded this puzzle
   if (userPieces.length < piecesNeeded()) { alert("Place all your settlement(s) and road(s) first."); return; }
   const settlements = userSettlements();
   const roads = userRoads();
@@ -659,7 +966,7 @@ async function submitPlacement() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ request: puzzle, placements: pls }),
     });
-    if (!resp.ok) { alert("Grading error:\n" + (await resp.text()).slice(0, 500)); return; }
+    if (!resp.ok) { alert("Grading error:\n" + (await resp.text()).slice(0, 500)); btn.disabled = false; return; }
     practiceResult = await resp.json();
     // update + persist score
     score.points += practiceResult.total_awarded;
@@ -671,8 +978,11 @@ async function submitPlacement() {
     updateScoreboard();
     render();
     renderFeedback();
-  } finally {
+    // leave Submit disabled until "New puzzle" (re-enabled by startUserAttempt) so the
+    // same answer can't be graded twice
+  } catch (err) {
     btn.disabled = false;
+    throw err;
   }
 }
 
@@ -701,6 +1011,33 @@ function roadDir(fromNode, edge) {
 }
 const DIR_WORD = { L: "left", R: "right", U: "up", D: "down", "?": "?" };
 
+// The user's submitted placement(s), reconstructed from the grades.
+function userChoicePlacements(r) {
+  const out = [];
+  for (let i = 0; i < USER_PIECES[r.seat]; i++) {
+    const s = r.grades.find((g) => g.kind === "settlement" && g.placement_index === i);
+    const rd = r.grades.find((g) => g.kind === "road" && g.placement_index === i);
+    if (s && rd && s.chosen_node != null && rd.chosen_edge) {
+      out.push({ settlement: s.chosen_node, road: rd.chosen_edge });
+    }
+  }
+  return out;
+}
+
+// Does a ranking pick match the user's choice? Matched on the *settlement* spot(s) only
+// (order-independent for the pair), so it still flags as "your choice" if only the road
+// differed. The road quality is shown separately by the per-placement grade.
+function recMatchesChoice(rec, chosen) {
+  if (chosen.length === 0 || rec.placements.length !== chosen.length) return false;
+  const used = chosen.map(() => false);
+  return rec.placements.every((rp) => {
+    const i = chosen.findIndex((cp, k) => !used[k] && cp.settlement === rp.settlement);
+    if (i === -1) return false;
+    used[i] = true;
+    return true;
+  });
+}
+
 function renderFeedback() {
   const div = $("feedback");
   if (!practiceResult) {
@@ -718,6 +1055,20 @@ function renderFeedback() {
   verdict.className = "verdict " + cls;
   verdict.textContent = `${word} · ${r.total_awarded.toFixed(1)} / ${r.total_max.toFixed(0)} pts`;
   div.appendChild(verdict);
+
+  // Calibrated learned-value win-% for the user's opening vs the model's line (Phase 5.2c).
+  if (r.user_win_prob != null) {
+    const u = Math.round(r.user_win_prob * 100);
+    const o = r.optimal_win_prob != null ? Math.round(r.optimal_win_prob * 100) : null;
+    const wl = document.createElement("div");
+    wl.className = "winline";
+    wl.title = WINPCT_HINT;
+    wl.innerHTML =
+      `<b>≈${u}% win</b> with your opening`
+      + (o != null ? ` <span style="color:#6f8597">· model's line ≈${o}%</span>` : "")
+      + `<br><span class="hint" style="margin:2px 0 0">${WINPCT_LABEL} — your win-% reflects how much your opening out-produces your opponent's.</span>`;
+    div.appendChild(wl);
+  }
 
   const sg = (i) => r.grades.find((g) => g.kind === "settlement" && g.placement_index === i);
   const rg = (i) => r.grades.find((g) => g.kind === "road" && g.placement_index === i);
@@ -740,19 +1091,22 @@ function renderFeedback() {
   h.style.cssText = "color:#8aa0b3; font-size:12px; text-transform:uppercase; letter-spacing:.05em; margin:12px 0 4px";
   h.textContent = "Solver's top picks";
   div.appendChild(h);
-  r.ranking.forEach((rec, i) => {
+  const chosen = userChoicePlacements(r);
+  rankedForDisplay(r.ranking).forEach((rec, i) => {
     const row = document.createElement("div");
     row.className = "rec" + (rec === practiceSel ? " sel" : "");
     const spots = rec.placements
       .map((p) => `${spotName(p.settlement)} (${roadDir(p.settlement, p.road)})`)
       .join("  +  ");
-    row.innerHTML = `<b>#${i + 1}</b> ${spots}<br><span style="color:#8aa0b3" title="${SCORE_HINT}">${scoreLabel(rec)}</span>`;
+    const mine = recMatchesChoice(rec, chosen)
+      ? `<span style="float:right; color:#9ed9ad; font-weight:600">(your choice)</span>` : "";
+    row.innerHTML = `${mine}<b>#${i + 1}</b> ${spots}<br><span style="color:#8aa0b3">${scoreLabel(rec)}</span>`;
     row.onclick = () => { practiceSel = rec; render(); renderFeedback(); };
     div.appendChild(row);
   });
   const legend = document.createElement("p");
   legend.className = "hint";
-  legend.innerHTML = "Gold ★ = model answer · cyan = a pick you clicked · ring = your spot (green ok / orange off)."
+  legend.innerHTML = "★ (in your colour) = model answer · cyan = a pick you clicked · ring = your spot (green ok / orange off)."
     + "<br>Spots read as <b>numbers-of-adjacent-hexes (road direction)</b>, e.g. 5-6-9 (L).";
   div.appendChild(legend);
 }
@@ -784,6 +1138,12 @@ function loadScore() {
 
 function saveScore() {
   try { localStorage.setItem(SCORE_KEY, JSON.stringify(score)); } catch (_) { /* ignore */ }
+}
+
+function resetScore() {
+  score = { ...BASE_SCORE };
+  saveScore();
+  updateScoreboard();
 }
 
 function updateScoreboard() {

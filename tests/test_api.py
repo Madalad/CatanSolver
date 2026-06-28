@@ -45,6 +45,36 @@ def test_recommend_first_seat_heuristic_only():
     assert all(len(r["placements"]) == 1 for r in recs)
 
 
+def test_recommend_annotates_calibrated_win_prob():
+    # the value model + advisor calibrator live in docs/; the recommend endpoint should
+    # annotate each pick with a calibrated opening win-% in (0, 1) (Phase 5.2c).
+    board = client.get("/api/board/random?seed=2").json()
+    body = {
+        "request": {
+            "board": board, "seat": "FIRST", "user_color": "P1",
+            "settlements": {}, "roads": {},
+        },
+        "top_k": 4,
+    }
+    recs = client.post("/api/recommend", json=body).json()
+    assert all(r["opening_win_prob"] is not None for r in recs)
+    assert all(0.0 <= r["opening_win_prob"] <= 1.0 for r in recs)
+
+
+def test_recommend_can_disable_win_prob():
+    board = client.get("/api/board/random?seed=2").json()
+    body = {
+        "request": {
+            "board": board, "seat": "FIRST", "user_color": "P1",
+            "settlements": {}, "roads": {},
+        },
+        "top_k": 3,
+        "win_prob": False,
+    }
+    recs = client.post("/api/recommend", json=body).json()
+    assert all(r["opening_win_prob"] is None for r in recs)
+
+
 def test_recommend_rejects_invalid_board():
     board = client.get("/api/board/random?seed=3").json()
     idx = next(i for i, h in enumerate(board["hexes"]) if h["resource"] != "DESERT")
@@ -84,6 +114,10 @@ def test_practice_new_and_grade_roundtrip():
     assert result["all_correct"] is True
     assert result["is_optimal"] is True
     assert result["total_awarded"] == result["total_max"] == 10.0
+    # the practice grade is annotated with calibrated win-% for the user's line and the
+    # model's line; grading the model line, both should be present and in (0, 1) (Phase 5.2c)
+    assert result["user_win_prob"] is not None and 0.0 <= result["user_win_prob"] <= 1.0
+    assert result["optimal_win_prob"] is not None and 0.0 <= result["optimal_win_prob"] <= 1.0
 
 
 def test_practice_new_second_seat_has_one_prior():

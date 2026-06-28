@@ -58,6 +58,7 @@
   .stat .l { font-size: 10px; color: #8aa0b3; text-transform: uppercase; letter-spacing: .05em; }
   .verdict { font-size: 16px; font-weight: 700; margin: 6px 0; }
   .verdict.ok { color: #56d364; } .verdict.bad { color: #f0883e; }
+  .winline { font-size: 14px; color: #cfe3d2; margin: 4px 0 8px; padding: 6px 8px; background: #11201a; border: 1px solid #1f3a2a; border-radius: 6px; }
   .grade { font-size: 13px; padding: 5px 6px; border-bottom: 1px solid #283543; }
   .grade .mark { font-weight: 700; }
   .grade .ok { color: #56d364; } .grade .bad { color: #f0883e; }
@@ -75,8 +76,14 @@
 <main>
   <!-- ADVISOR controls -->
   <div class="panel controls" id="advisorControls">
+    <div id="practiceBuildBar" class="hidden" style="margin:-2px 0 12px; padding:10px 12px; background:#11201a; border:1px solid #1f6feb; border-radius:8px">
+      <b>🛠 Building a board for practice</b>
+      <p class="hint" style="margin:4px 0 8px">Edit the board below (paint, or click hexes/ports), then use it for practice.</p>
+      <button id="useInPractice" class="primary">Use in practice ▶</button>
+      <button id="cancelBuild">Cancel</button>
+    </div>
     <div><button id="randomize">🎲 Random Board</button> <button id="clear">Clear</button></div>
-    <p class="hint">Click a hex to edit it in a menu — <i>or</i> select a paint below and click hexes to fill them fast (click the paint again to deselect).</p>
+    <p class="hint">Click a hex (or a <b>port</b>) to edit it in a menu — <i>or</i> select a paint below and click hexes to fill them fast (click the paint again to deselect).</p>
     <h3>Paint resource</h3>
     <div class="swatches" id="resourceSwatches"></div>
     <h3>Paint number</h3>
@@ -89,8 +96,8 @@
     </select>
     <p class="hint" id="placeHint"></p>
     <h3>Analyze <button id="analyzeInfo" class="infobtn" title="How does Analyze work?">i</button></h3>
-    <p class="hint">Ranks every legal spot by a strength score (higher = better) and highlights the best on the board.</p>
-    <div><button id="analyze" class="primary">Analyze ▶</button></div>
+    <p class="hint">Ranks legal openings by a calibrated win-% (vs an equal-strength bot) and highlights the best on the board.</p>
+    <div><button id="analyze" class="primary">Analyze ▶</button> <button id="undoAnalyze" title="Clear the result so you can tweak the board or placements and re-analyze">↶ Undo result</button></div>
     <p class="status" id="status"></p>
   </div>
 
@@ -145,14 +152,29 @@
   </div>
 </div>
 
+<!-- Port editor (advisor: click a port) -->
+<div class="modal-overlay hidden" id="portModal">
+  <div class="modal-card">
+    <h2>Set this port</h2>
+    <p class="hint">Pick the trade type. <b>3:1</b> trades any resource; a resource port is <b>2:1</b> for that resource. (Where the port sits is fixed.)</p>
+    <h3 style="margin:12px 0 6px; font-size:12px; color:#8aa0b3; text-transform:uppercase; letter-spacing:.05em">Type</h3>
+    <div class="chip-grid" id="portTypeChoices"></div>
+    <div class="modal-actions">
+      <button id="portApply" class="primary">Apply</button>
+      <button id="portClearOne">Clear port</button>
+      <button id="portCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- Analyze info -->
 <div class="modal-overlay hidden" id="infoModal">
   <div class="modal-card">
     <h2>How “Analyze” works</h2>
     <div class="info-body">
       <p>You give the solver a <b>board</b> and your <b>draft situation</b> (going first, going second, or your final first-pick). It then ranks every legal opening and highlights the best place(s) to drop your settlement + road.</p>
-      <p>Each spot gets a <b>strength score</b> — higher is better. It rewards how many resources the spot produces (weighted toward <b>wheat &amp; ore</b> for the 15-point game), how <b>varied</b> those resources are, and whether it touches a useful <b>port</b>. The top score is the recommended pick.</p>
-      <p>The score is a <b>comparative ranking, not a win probability</b>. We measured it against Monte-Carlo simulations and it tracks the true ranking of spots well — but turning it into a believable win&nbsp;% needs a strong opponent to play against, which we don't have yet (the only available bots are far below human level). So we show the score, and a calibrated win&nbsp;% will follow once the solver has its own strong bot.</p>
+      <p>Each spot gets a <b>strength score</b> — higher is better. It rewards how many resources the spot produces (weighted toward <b>wheat &amp; ore</b> for the 15-point game), how <b>varied</b> those resources are, and whether it touches a useful <b>port</b>. This pre-ranks the candidates fast.</p>
+      <p>Each candidate also gets a <b>calibrated win&nbsp;%</b> — P(you win) <b>vs an equal-strength bot</b>. We measure how much your opening <b>out-produces your opponent's</b> and map that gap to a win-% calibrated on thousands of self-play games. This is the headline number, and we order the picks by it. A balanced opening is ~<b>50/50</b>, but a clearly stronger one wins ~<b>85%</b> even against an equal opponent — and out-drafting matters about equally at every skill level we tested. (The old weak-bot ~96% was an illusion.)</p>
     </div>
     <div class="modal-actions"><button id="infoClose" class="primary">Got it</button></div>
   </div>
@@ -163,11 +185,21 @@
   <div class="modal-card">
     <h2>Choose a practice scenario</h2>
     <p class="hint">Place the best opening for the situation, then submit to score it.</p>
+    <h3 style="margin:14px 0 0; font-size:12px; color:#8aa0b3; text-transform:uppercase; letter-spacing:.05em">Board</h3>
+    <div class="scenario-buttons">
+      <button data-boardmode="random">🎲 Random board<span>a new random board every puzzle</span></button>
+      <button data-boardmode="fixed">📌 Fixed board<span>one random board, kept for every puzzle</span></button>
+      <button data-boardmode="configure">✏️ Build your own board<span>design a board, then practice it</span></button>
+    </div>
+    <h3 style="margin:14px 0 0; font-size:12px; color:#8aa0b3; text-transform:uppercase; letter-spacing:.05em">Scenario</h3>
     <div class="scenario-buttons">
       <button data-seat="FIRST">Going first<span>empty board — place 1 settlement + road</span></button>
       <button data-seat="SECOND">Going second<span>opponent's 1st is down — place both of yours</span></button>
       <button data-seat="FIRST_FINAL">First player's final pick<span>3 already on the board — place your last</span></button>
       <button data-seat="RANDOM">🎲 Random<span>a random one of the above each puzzle</span></button>
+    </div>
+    <div class="modal-actions">
+      <button id="startPractice" class="primary" disabled>Start practice ▶</button>
     </div>
   </div>
 </div>
