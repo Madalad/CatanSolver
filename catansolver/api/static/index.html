@@ -71,6 +71,7 @@
   <div class="tabs">
     <button id="tabAdvisor" class="tab active">Advisor</button>
     <button id="tabPractice" class="tab">Practice</button>
+    <button id="tabRules" class="tab">Rules</button>
   </div>
 </header>
 <main>
@@ -120,7 +121,7 @@
     <div><button id="resetScore">Reset score</button></div>
   </div>
 
-  <div class="panel"><svg id="board"></svg></div>
+  <div class="panel" id="boardPanel"><svg id="board"></svg></div>
 
   <!-- ADVISOR results -->
   <div class="panel results" id="advisorResults" style="width: 300px">
@@ -132,6 +133,46 @@
   <div class="panel results hidden" id="practiceResults" style="width: 300px">
     <h3 style="margin-top:0; color:#8aa0b3; font-size:12px; text-transform:uppercase; letter-spacing:.05em">Feedback</h3>
     <div id="feedback"><p class="hint">Click <b>New puzzle</b> to begin.</p></div>
+  </div>
+
+  <!-- RULES -->
+  <div class="panel hidden" id="rulesPanel" style="max-width:680px; line-height:1.5">
+    <h2 style="margin-top:0">Colonist.io 1v1 ruleset</h2>
+    <p class="hint" style="margin-top:0">This solver targets the competitive <b>1-vs-1</b> mode on Colonist.io, played on the classic base board. It differs from standard 4-player Catan in a few important ways (highlighted below).</p>
+
+    <h3 style="color:#8aa0b3; text-transform:uppercase; font-size:12px; letter-spacing:.05em">Goal</h3>
+    <ul>
+      <li><b>First to 15 victory points</b> wins (standard Catan is 10).</li>
+      <li>VP sources: settlement = 1, city = 2, each Victory-Point dev card = 1, <b>Longest Road</b> (5+ road segments) = 2, <b>Largest Army</b> (3+ played knights) = 2.</li>
+    </ul>
+
+    <h3 style="color:#8aa0b3; text-transform:uppercase; font-size:12px; letter-spacing:.05em">Board &amp; setup</h3>
+    <ul>
+      <li>Classic base board: 19 hexes (4 wood, 4 sheep, 4 wheat, 3 brick, 3 ore, 1 desert), 18 number tokens, 9 ports.</li>
+      <li>Number tokens follow the standard <b>spiral</b> layout — balanced so the high-odds <b>6s and 8s stay spread out</b> (never adjacent) — with a random starting hex and direction.</li>
+      <li>2 players, snake-draft opening: <b>P1, P2, P2, P1</b> (each settlement placed with a road). The resources of your <b>second-placed</b> settlement form your opening hand (one card per adjacent producing hex).</li>
+    </ul>
+
+    <h3 style="color:#8aa0b3; text-transform:uppercase; font-size:12px; letter-spacing:.05em">Friendly Robber <span style="color:#e2711d">(1v1 difference)</span></h3>
+    <ul>
+      <li>When you roll a 7 or play a knight, you move the robber — but you may <b>only steal from / block a player who has at least 3 visible victory points</b>. A player below 3 VP cannot be targeted.</li>
+    </ul>
+
+    <h3 style="color:#8aa0b3; text-transform:uppercase; font-size:12px; letter-spacing:.05em">Discarding on a 7 <span style="color:#e2711d">(1v1 difference)</span></h3>
+    <ul>
+      <li>You discard half your hand (rounded down) only if you hold <b>more than 9 cards</b> (i.e. 10+).</li>
+    </ul>
+
+    <h3 style="color:#8aa0b3; text-transform:uppercase; font-size:12px; letter-spacing:.05em">Trading <span style="color:#e2711d">(1v1 difference)</span></h3>
+    <ul>
+      <li><b>No player-to-player (domestic) trading</b> — in 1v1 a trade mostly helps your only opponent, so it is disabled, matching competitive play.</li>
+      <li><b>Bank &amp; port (maritime) trades are allowed:</b> 4:1 with the bank, 3:1 at a generic port, 2:1 at a matching-resource port.</li>
+    </ul>
+
+    <h3 style="color:#8aa0b3; text-transform:uppercase; font-size:12px; letter-spacing:.05em">Standard components</h3>
+    <ul>
+      <li>Standard building costs, a bank of 19 cards per resource, and the standard 25-card dev deck (14 knights, 5 victory point, 2 road building, 2 year of plenty, 2 monopoly).</li>
+    </ul>
   </div>
 </main>
 
@@ -174,7 +215,7 @@
     <div class="info-body">
       <p>You give the solver a <b>board</b> and your <b>draft situation</b> (going first, going second, or your final first-pick). It then ranks every legal opening and highlights the best place(s) to drop your settlement + road.</p>
       <p>Each spot gets a <b>strength score</b> — higher is better. It rewards how many resources the spot produces (weighted toward <b>wheat &amp; ore</b> for the 15-point game), how <b>varied</b> those resources are, and whether it touches a useful <b>port</b>. This pre-ranks the candidates fast.</p>
-      <p>Each candidate also gets a <b>calibrated win&nbsp;%</b> — P(you win) <b>vs an equal-strength bot</b>. We measure how much your opening <b>out-produces your opponent's</b> and map that gap to a win-% calibrated on thousands of self-play games. This is the headline number, and we order the picks by it. A balanced opening is ~<b>50/50</b>, but a clearly stronger one wins ~<b>85%</b> even against an equal opponent — and out-drafting matters about equally at every skill level we tested. (The old weak-bot ~96% was an illusion.)</p>
+      <p>Each candidate also gets a <b>calibrated win&nbsp;%</b> — P(you win) <b>vs an equal-strength bot</b>. We measure how much your opening <b>out-produces your opponent's</b> (with both players completing the rest of the draft at their best opening) and map that gap to a win-% fit on thousands of self-play games. This is the headline number, and we order the picks by it. A balanced opening is ~<b>50/50</b>; the strongest openings reach ~<b>60%</b>, and going first edges going second (best play ≈<b>51%</b> vs ≈<b>45%</b>), in line with the ~<b>56/44</b> first-mover advantage seen in elite 1v1 play.</p>
     </div>
     <div class="modal-actions"><button id="infoClose" class="primary">Got it</button></div>
   </div>

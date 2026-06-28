@@ -87,6 +87,7 @@ async function init() {
   // tabs
   $("tabAdvisor").onclick = () => setMode("advisor");
   $("tabPractice").onclick = () => setMode("practice");
+  $("tabRules").onclick = () => setMode("rules");
   // hex editor modal
   $("hexApply").onclick = applyHexEdit;
   $("hexClearOne").onclick = clearHexEdit;
@@ -238,15 +239,19 @@ async function setMode(m, skipMenu) {
     if (savedAdvisorBoard) { board = savedAdvisorBoard; savedAdvisorBoard = null; resetDraft(); }
   }
   mode = m;
+  const isRules = m === "rules";
   $("tabAdvisor").classList.toggle("active", m === "advisor");
   $("tabPractice").classList.toggle("active", m === "practice");
+  $("tabRules").classList.toggle("active", isRules);
   $("advisorControls").classList.toggle("hidden", m !== "advisor");
   $("advisorResults").classList.toggle("hidden", m !== "advisor");
   $("practiceControls").classList.toggle("hidden", m !== "practice");
   $("practiceResults").classList.toggle("hidden", m !== "practice");
+  $("boardPanel").classList.toggle("hidden", isRules);  // the board has no place on the rules tab
+  $("rulesPanel").classList.toggle("hidden", !isRules);
   $("practiceBuildBar").classList.toggle("hidden", !(m === "advisor" && buildingForPractice));
   if (m === "practice" && !skipMenu) { showScenarioModal(); return; }
-  render();
+  if (!isRules) render();
 }
 
 function activeBoard() {
@@ -1162,7 +1167,32 @@ function renderFeedback() {
   h.textContent = "Solver's top picks";
   div.appendChild(h);
   const chosen = userChoicePlacements(r);
-  rankedForDisplay(r.ranking).forEach((rec, i) => {
+  const ranked = rankedForDisplay(r.ranking);
+
+  // A single "reveal rest of draft" toggle above the list. It plays out the optimal draft
+  // behind the *selected* pick; clicking a different pick clears it (handled in row.onclick).
+  if (ranked.some((rec) => rec.continuation)) {
+    const revealed = !!practiceReveal;
+    const btn = document.createElement("button");
+    btn.textContent = revealed ? "Hide rest of draft" : "Reveal rest of draft";
+    btn.style.cssText = "margin:0 0 8px; font-size:12px; padding:3px 10px; cursor:pointer;"
+      + "border-radius:5px; border:1px solid #38465a; color:#e6edf3; background:"
+      + (revealed ? "#2f6fc4" : "#1b2430") + ";";
+    btn.onclick = () => {
+      if (revealed) {
+        practiceReveal = null;
+      } else {  // reveal the selected pick's line (or the top pick that has one)
+        const target = (practiceSel && practiceSel.continuation)
+          ? practiceSel : ranked.find((rec) => rec.continuation);
+        practiceSel = target;
+        practiceReveal = target;
+      }
+      render(); renderFeedback();
+    };
+    div.appendChild(btn);
+  }
+
+  ranked.forEach((rec, i) => {
     const row = document.createElement("div");
     row.className = "rec" + (rec === practiceSel ? " sel" : "");
     const spots = rec.placements
@@ -1171,24 +1201,11 @@ function renderFeedback() {
     const mine = recMatchesChoice(rec, chosen)
       ? `<span style="float:right; color:#9ed9ad; font-weight:600">(your choice)</span>` : "";
     row.innerHTML = `${mine}<b>#${i + 1}</b> ${spots}<br><span style="color:#8aa0b3">${scoreLabel(rec)}</span>`;
-    row.onclick = () => { practiceSel = rec; render(); renderFeedback(); };
-    // Per-pick toggle to reveal the rest of the optimal draft behind this pick.
-    if (rec.continuation) {
-      const revealed = rec === practiceReveal;
-      const btn = document.createElement("button");
-      btn.className = "revealBtn";
-      btn.textContent = revealed ? "Hide rest of draft" : "Reveal rest of draft";
-      btn.style.cssText = "margin-top:6px; font-size:11px; padding:2px 8px; cursor:pointer;"
-        + "border-radius:5px; border:1px solid #38465a; background:" + (revealed ? "#2f6fc4" : "#1b2430")
-        + "; color:#e6edf3;";
-      btn.onclick = (ev) => {
-        ev.stopPropagation();
-        practiceReveal = revealed ? null : rec;
-        if (!revealed) practiceSel = rec;  // keep the selection consistent with the reveal
-        render(); renderFeedback();
-      };
-      row.appendChild(btn);
-    }
+    row.onclick = () => {
+      if (practiceSel !== rec) practiceReveal = null;  // changing pick hides the revealed line
+      practiceSel = rec;
+      render(); renderFeedback();
+    };
     div.appendChild(row);
   });
   const legend = document.createElement("p");
