@@ -282,6 +282,17 @@ class Placement(BaseModel):
     road: Edge
 
 
+class OptimalLine(BaseModel):
+    """The full optimal draft line behind a pick — each player's opening settlements (with
+    their initial roads) in placement order, used to *reveal the rest of the opening* in
+    practice mode. ``user`` is the practising player's settlements; for the FIRST seat this is
+    ``[first pick, final pick]``, which the UI numbers 1/2 (the order is meaningful — the
+    second-placed settlement sets the starting hand). ``opponent`` is the other player's."""
+
+    user: List[Placement] = Field(default_factory=list)
+    opponent: List[Placement] = Field(default_factory=list)
+
+
 class Recommendation(BaseModel):
     """A ranked opening recommendation (solver output / API response).
 
@@ -301,6 +312,10 @@ class Recommendation(BaseModel):
     # This is the trustworthy, honestly-labelled number the UI shows (Phase 5.2c); it
     # supersedes the shelved rollout-vs-weak-bot estimate. None if the model is unavailable.
     opening_win_prob: Optional[float] = None
+    # The optimal completion of the draft behind this pick (practice mode only): the rest of
+    # the opening played out optimally, for "reveal the remaining placements". None when there
+    # is nothing left to reveal (e.g. the FIRST_FINAL seat's pick is the last placement).
+    continuation: Optional[OptimalLine] = None
 
 
 # --------------------------------------------------------------------------- #

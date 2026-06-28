@@ -57,6 +57,7 @@ let savedAdvisorBoard = null;               // advisor board stashed during a bu
 let userPieces = [];                        // ordered [{k:"S",node} | {k:"R",edge}], S,R,S,R…
 let practiceResult = null;
 let practiceSel = null;                     // a ranking row the user clicked to inspect
+let practiceReveal = null;                  // a ranking row whose full optimal line is revealed
 const SCORE_KEY = "catanPracticeScoreV2";   // bumped: scoring model changed to 0–10
 const BASE_SCORE = { points: 0, maxPoints: 0, streak: 0, attempts: 0, last: null };
 let score = loadScore();
@@ -584,8 +585,12 @@ function render() {
     drawPieces(svg, puzzle.settlements || {}, puzzle.roads || {});       // the given priors
     drawPieces(svg, { P1: userSettlements() }, { P1: userRoads() });      // the user's answer
     if (practiceResult) {
-      drawHighlight(svg, practiceResult.optimal_placements, PCOLOR[userColor()]);
-      if (practiceSel) drawHighlight(svg, practiceSel.placements, "#35d0e0");
+      if (practiceReveal && practiceReveal.continuation) {
+        drawContinuation(svg, practiceReveal.continuation, puzzle.seat);
+      } else {
+        drawHighlight(svg, practiceResult.optimal_placements, PCOLOR[userColor()]);
+        if (practiceSel) drawHighlight(svg, practiceSel.placements, "#35d0e0");
+      }
       drawGradeMarks(svg);
     }
   }
@@ -687,22 +692,36 @@ function contrastInk(hex) {
   return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.55 ? "#0b1118" : "#f5f5f0";
 }
 
+// One highlight marker: the road, a filled node circle, and a `label` glyph (★ or a number).
+function drawMarker(svg, pl, color, label) {
+  const e = findEdge(pl.road[0], pl.road[1]);
+  if (e) svg.appendChild(el("line", { x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2, stroke: color, "stroke-width": 8, "stroke-linecap": "round", opacity: 0.85, "pointer-events": "none" }));
+  const n = geom.nodes.find((x) => x.id === pl.settlement);
+  if (!n) return;
+  svg.appendChild(el("circle", { cx: n.x, cy: n.y, r: 13, fill: color, stroke: "#0b1118", "stroke-width": 2, "pointer-events": "none" }));
+  if (!label) return;
+  const t = el("text", { x: n.x, y: n.y + 5, "text-anchor": "middle", "font-size": 13, "font-weight": "bold", fill: contrastInk(color), "pointer-events": "none" });
+  t.textContent = label;
+  svg.appendChild(t);
+}
+
 // Highlight a list of {settlement, road} placements in `color` (recommendation / model line).
+// Always the model-answer star, never a per-spot label: for the second player both settlements
+// go down together, so any A/B or 1-2 marker reads as a misleading ranking.
 function drawHighlight(svg, pls, color) {
-  pls.forEach((pl, i) => {
-    const e = findEdge(pl.road[0], pl.road[1]);
-    if (e) svg.appendChild(el("line", { x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2, stroke: color, "stroke-width": 8, "stroke-linecap": "round", opacity: 0.85, "pointer-events": "none" }));
-    const n = geom.nodes.find((x) => x.id === pl.settlement);
-    if (n) {
-      svg.appendChild(el("circle", { cx: n.x, cy: n.y, r: 13, fill: color, stroke: "#0b1118", "stroke-width": 2, "pointer-events": "none" }));
-      const t = el("text", { x: n.x, y: n.y + 5, "text-anchor": "middle", "font-size": 13, "font-weight": "bold", fill: contrastInk(color), "pointer-events": "none" });
-      // Always the model-answer star, never a per-spot label: for the second player both
-      // settlements go down together, so any A/B or 1-2 marker reads as a misleading ranking.
-      // The going-second note in the panels explains that order doesn't matter.
-      t.textContent = "★";
-      svg.appendChild(t);
-    }
-  });
+  pls.forEach((pl) => drawMarker(svg, pl, color, "★"));
+}
+
+// Reveal the full optimal draft behind a pick: the opponent's optimal replies (in their
+// colour, unlabelled) and the user's own optimal settlements (in the user's colour). For the
+// FIRST seat the user has two settlements whose ORDER matters (turn 1 vs the final pick — the
+// second one placed sets the starting hand), so number them 1/2; otherwise star them.
+function drawContinuation(svg, line, seat) {
+  const uCol = PCOLOR[userColor()];
+  const oCol = PCOLOR[userColor() === "P1" ? "P2" : "P1"];
+  line.opponent.forEach((pl) => drawMarker(svg, pl, oCol, ""));
+  const numbered = seat === "FIRST" && line.user.length > 1;
+  line.user.forEach((pl, i) => drawMarker(svg, pl, uCol, numbered ? String(i + 1) : "★"));
 }
 
 // Ring the user's chosen spots green/red according to the grade.
@@ -953,6 +972,7 @@ function startUserAttempt() {
   userPieces = [];
   practiceResult = null;
   practiceSel = null;
+  practiceReveal = null;
   const sb = $("submitPlacement");
   if (sb) sb.disabled = false;  // a fresh attempt can be submitted again
 }
@@ -1152,12 +1172,31 @@ function renderFeedback() {
       ? `<span style="float:right; color:#9ed9ad; font-weight:600">(your choice)</span>` : "";
     row.innerHTML = `${mine}<b>#${i + 1}</b> ${spots}<br><span style="color:#8aa0b3">${scoreLabel(rec)}</span>`;
     row.onclick = () => { practiceSel = rec; render(); renderFeedback(); };
+    // Per-pick toggle to reveal the rest of the optimal draft behind this pick.
+    if (rec.continuation) {
+      const revealed = rec === practiceReveal;
+      const btn = document.createElement("button");
+      btn.className = "revealBtn";
+      btn.textContent = revealed ? "Hide rest of draft" : "Reveal rest of draft";
+      btn.style.cssText = "margin-top:6px; font-size:11px; padding:2px 8px; cursor:pointer;"
+        + "border-radius:5px; border:1px solid #38465a; background:" + (revealed ? "#2f6fc4" : "#1b2430")
+        + "; color:#e6edf3;";
+      btn.onclick = (ev) => {
+        ev.stopPropagation();
+        practiceReveal = revealed ? null : rec;
+        if (!revealed) practiceSel = rec;  // keep the selection consistent with the reveal
+        render(); renderFeedback();
+      };
+      row.appendChild(btn);
+    }
     div.appendChild(row);
   });
   const legend = document.createElement("p");
   legend.className = "hint";
   legend.innerHTML = "★ (in your colour) = model answer · cyan = a pick you clicked · ring = your spot (green ok / orange off)."
     + "<br>Spots read as <b>numbers-of-adjacent-hexes (road direction)</b>, e.g. 5-6-9 (L)."
+    + "<br><b>Reveal rest of draft</b> plays the opening out optimally: the opponent's best replies (in their colour) and your remaining optimal spot"
+    + (puzzle.seat === "FIRST" ? " — numbered 1/2 to show which settlement you'd place first vs last." : ".")
     + (n > 1 ? "<br>" + SECOND_ORDER_NOTE : "");
   div.appendChild(legend);
 }

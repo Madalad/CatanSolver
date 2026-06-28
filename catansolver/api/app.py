@@ -28,7 +28,13 @@ from catansolver.io.schema import (
     PracticeResult,
     Recommendation,
 )
-from catansolver.placement import generate_puzzle, grade_practice, opening_win_prob_gap, recommend_opening
+from catansolver.placement import (
+    generate_puzzle,
+    grade_practice,
+    opening_win_prob_gap,
+    optimal_continuation,
+    recommend_opening,
+)
 
 from .geometry import board_geometry
 
@@ -158,9 +164,17 @@ def post_practice_grade(body: PracticeGradeBody) -> PracticeResult:
     result.user_win_prob = _win_prob(body.request, body.placements)
     result.optimal_win_prob = _win_prob(body.request, result.optimal_placements)
     # Annotate each of the solver's top picks with the same calibrated win-% the advisor
-    # shows, so the practice "top picks" list reads consistently with the advisor tab.
+    # shows, and with the optimal completion of the draft behind that pick (so the user can
+    # reveal the remaining placements). ``continuation`` is omitted when nothing remains.
+    known = sum(len(v) for v in body.request.settlements.values())
     for rec in result.ranking:
         rec.opening_win_prob = _win_prob(body.request, rec.placements)
+        try:
+            line = optimal_continuation(body.request, rec.placements)
+        except Exception:
+            line = None
+        if line is not None and len(line.user) + len(line.opponent) > known + len(rec.placements):
+            rec.continuation = line
     return result
 
 

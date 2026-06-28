@@ -20,11 +20,18 @@ from catansolver.engine.config import COLONIST_1V1, RulesConfig
 from catansolver.io.schema import (
     DraftSeat,
     OpeningPlacementRequest,
+    OptimalLine,
     Placement,
     Recommendation,
 )
 
-from .draft import PolicyFactory, _pick_road, drive_to_user_decision, rollout_policy
+from .draft import (
+    PolicyFactory,
+    _pick_road,
+    drive_to_user_decision,
+    opening_optimal_policy,
+    rollout_policy,
+)
 from .heuristic import best_initial_road, node_score, pair_score
 from .rollout import WinEstimate, estimate_win_prob
 from .winprob_model import win_prob_estimate
@@ -63,6 +70,36 @@ def recommend_opening(
     for r in recs:
         r.model_win_prob = win_prob_estimate(request.seat, r.heuristic_score)
     return recs
+
+
+def _color_line(game, color) -> List[Placement]:
+    """The settlement+road pairs a colour placed, in placement order (the initial-phase
+    SETTLEMENT/ROAD lists are parallel: each settlement is immediately followed by its road)."""
+    bc = game.state.buildings_by_color[color]
+    setts = bc.get("SETTLEMENT", [])
+    roads = bc.get("ROAD", [])
+    return [Placement(settlement=s, road=tuple(sorted(r))) for s, r in zip(setts, roads)]
+
+
+def optimal_continuation(
+    request: OpeningPlacementRequest,
+    placements: List[Placement],
+    *,
+    policy: PolicyFactory = opening_optimal_policy,
+    rules: RulesConfig = COLONIST_1V1,
+    seed: int = 0,
+) -> OptimalLine:
+    """Play the chosen pick ``placements`` then finish the draft optimally (the bot's best
+    opening for both sides), and return each player's full opening line in placement order.
+    Lets the practice UI reveal the rest of the optimal opening behind a pick."""
+    game, user = drive_to_user_decision(request, policy, seed=seed, rules=rules)
+    for pl in placements:
+        game.execute(Action(user, ActionType.BUILD_SETTLEMENT, pl.settlement))
+        game.execute(_pick_road(game, tuple(pl.road)))
+    while game.state.is_initial_build_phase and game.winning_color() is None:
+        game.play_tick()
+    opponent = next(c for c in game.state.colors if c != user)
+    return OptimalLine(user=_color_line(game, user), opponent=_color_line(game, opponent))
 
 
 def _legal_settlements(game) -> List[int]:
