@@ -46,6 +46,7 @@ let portEditType = null;
 let draftPieces = []; // advisor: ordered existing draft pieces [{p, k:"S"|"R", node|edge}]
 let recs = [];
 let selected = null;
+let advisorReveal = null;                   // a recommendation whose full optimal line is revealed
 
 // practice state
 let puzzle = null;                          // OpeningPlacementRequest from the server
@@ -434,6 +435,7 @@ function resetDraft() {
   draftPieces = [];
   recs = [];
   selected = null;
+  advisorReveal = null;
   renderResults();
 }
 
@@ -442,6 +444,7 @@ function resetDraft() {
 function clearAnalysis() {
   recs = [];
   selected = null;
+  advisorReveal = null;
   render();
   renderResults();
 }
@@ -585,7 +588,11 @@ function render() {
 
   if (mode === "advisor") {
     drawPieces(svg, draftSettlements(), draftRoads());
-    if (selected) drawHighlight(svg, selected.placements, PCOLOR[userColor()]);
+    if (advisorReveal && advisorReveal.continuation) {
+      drawContinuation(svg, advisorReveal.continuation, seat);
+    } else if (selected) {
+      drawHighlight(svg, selected.placements, PCOLOR[userColor()]);
+    }
   } else if (puzzle) {
     drawPieces(svg, puzzle.settlements || {}, puzzle.roads || {});       // the given priors
     drawPieces(svg, { P1: userSettlements() }, { P1: userRoads() });      // the user's answer
@@ -721,6 +728,31 @@ function drawHighlight(svg, pls, color) {
 // colour, unlabelled) and the user's own optimal settlements (in the user's colour). For the
 // FIRST seat the user has two settlements whose ORDER matters (turn 1 vs the final pick — the
 // second one placed sets the starting hand), so number them 1/2; otherwise star them.
+// A shared "reveal rest of draft" toggle for a results list (advisor + practice). The accessor
+// closures read/write the list's selected and revealed rec; `redraw` re-renders. Reveals the
+// optimal line behind the selected pick (or the top one with a line); returns null if none has.
+function revealButton(list, getSel, setSel, getRev, setRev, redraw) {
+  if (!list.some((r) => r.continuation)) return null;
+  const revealed = !!getRev();
+  const btn = document.createElement("button");
+  btn.textContent = revealed ? "Hide rest of draft" : "Reveal rest of draft";
+  btn.style.cssText = "margin:0 0 8px; font-size:12px; padding:3px 10px; cursor:pointer;"
+    + "border-radius:5px; border:1px solid #38465a; color:#e6edf3; background:"
+    + (revealed ? "#2f6fc4" : "#1b2430") + ";";
+  btn.onclick = () => {
+    if (revealed) {
+      setRev(null);
+    } else {
+      const sel = getSel();
+      const target = (sel && sel.continuation) ? sel : list.find((r) => r.continuation);
+      setSel(target);
+      setRev(target);
+    }
+    redraw();
+  };
+  return btn;
+}
+
 function drawContinuation(svg, line, seat) {
   const uCol = PCOLOR[userColor()];
   const oCol = PCOLOR[userColor() === "P1" ? "P2" : "P1"];
@@ -866,6 +898,7 @@ async function analyze() {
     if (!resp.ok) { alert("Solver error:\n" + (await resp.text()).slice(0, 500)); return; }
     recs = rankedForDisplay(await resp.json()); // headline by calibrated win-%
     selected = recs[0] || null;
+    advisorReveal = null;
     render();
     renderResults();
   } finally {
@@ -883,6 +916,10 @@ function renderResults() {
     return;
   }
   div.replaceChildren();
+  // "Reveal rest of draft" toggle above the list (acts on the selected recommendation).
+  const rb = revealButton(recs, () => selected, (v) => (selected = v),
+    () => advisorReveal, (v) => (advisorReveal = v), () => { render(); renderResults(); });
+  if (rb) div.appendChild(rb);
   recs.forEach((r, i) => {
     const row = document.createElement("div");
     row.className = "rec" + (r === selected ? " sel" : "");
@@ -890,7 +927,11 @@ function renderResults() {
       .map((p) => `${spotName(p.settlement)} (${roadDir(p.settlement, p.road)})`)
       .join("  +  ");
     row.innerHTML = `<b>#${i + 1}</b> ${spots}<br><span style="color:#8aa0b3">${scoreLabel(r)}</span>`;
-    row.onclick = () => { selected = r; render(); renderResults(); };
+    row.onclick = () => {
+      if (selected !== r) advisorReveal = null;  // changing pick hides the revealed line
+      selected = r;
+      render(); renderResults();
+    };
     div.appendChild(row);
   });
   if (recs.some((r) => r.placements.length > 1)) {
@@ -1162,35 +1203,19 @@ function renderFeedback() {
     div.appendChild(block);
   }
 
+  const chosen = userChoicePlacements(r);
+  const ranked = rankedForDisplay(r.ranking);
+
+  // "Reveal rest of draft" toggle, placed *above* the title (acts on the selected pick;
+  // clicking a different pick clears it, handled in row.onclick).
+  const rb = revealButton(ranked, () => practiceSel, (v) => (practiceSel = v),
+    () => practiceReveal, (v) => (practiceReveal = v), () => { render(); renderFeedback(); });
+  if (rb) div.appendChild(rb);
+
   const h = document.createElement("h3");
   h.style.cssText = "color:#8aa0b3; font-size:12px; text-transform:uppercase; letter-spacing:.05em; margin:12px 0 4px";
   h.textContent = "Solver's top picks";
   div.appendChild(h);
-  const chosen = userChoicePlacements(r);
-  const ranked = rankedForDisplay(r.ranking);
-
-  // A single "reveal rest of draft" toggle above the list. It plays out the optimal draft
-  // behind the *selected* pick; clicking a different pick clears it (handled in row.onclick).
-  if (ranked.some((rec) => rec.continuation)) {
-    const revealed = !!practiceReveal;
-    const btn = document.createElement("button");
-    btn.textContent = revealed ? "Hide rest of draft" : "Reveal rest of draft";
-    btn.style.cssText = "margin:0 0 8px; font-size:12px; padding:3px 10px; cursor:pointer;"
-      + "border-radius:5px; border:1px solid #38465a; color:#e6edf3; background:"
-      + (revealed ? "#2f6fc4" : "#1b2430") + ";";
-    btn.onclick = () => {
-      if (revealed) {
-        practiceReveal = null;
-      } else {  // reveal the selected pick's line (or the top pick that has one)
-        const target = (practiceSel && practiceSel.continuation)
-          ? practiceSel : ranked.find((rec) => rec.continuation);
-        practiceSel = target;
-        practiceReveal = target;
-      }
-      render(); renderFeedback();
-    };
-    div.appendChild(btn);
-  }
 
   ranked.forEach((rec, i) => {
     const row = document.createElement("div");

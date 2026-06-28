@@ -85,6 +85,19 @@ def _win_prob(request: OpeningPlacementRequest, placements: List[Placement]) -> 
         return None
 
 
+def _attach_continuation(request: OpeningPlacementRequest, rec: Recommendation) -> None:
+    """Annotate ``rec`` with the optimal completion of the draft behind its pick, so the UI can
+    'reveal the rest' of the opening. Left as ``None`` when nothing remains (e.g. the
+    FIRST_FINAL seat's pick is the last placement)."""
+    known = sum(len(v) for v in request.settlements.values()) + len(rec.placements)
+    try:
+        line = optimal_continuation(request, rec.placements)
+    except Exception:
+        return
+    if len(line.user) + len(line.opponent) > known:
+        rec.continuation = line
+
+
 @app.get("/api/layout")
 def get_layout() -> dict:
     """Fixed board geometry (pixel positions for hexes/nodes/edges/ports)."""
@@ -123,9 +136,10 @@ def post_recommend(body: RecommendBody) -> List[Recommendation]:
     calibrated learned-value opening win-% vs an equal-strength bot. Ranking stays heuristic;
     the win-% is the value model's independent read of the same picks."""
     recs = recommend_opening(body.request, top_k=body.top_k, n_rollouts=body.n_rollouts)
-    if body.win_prob:
-        for rec in recs:
+    for rec in recs:
+        if body.win_prob:
             rec.opening_win_prob = _win_prob(body.request, rec.placements)
+        _attach_continuation(body.request, rec)  # for "reveal rest of draft" on the advisor tab
     return recs
 
 
@@ -166,15 +180,9 @@ def post_practice_grade(body: PracticeGradeBody) -> PracticeResult:
     # Annotate each of the solver's top picks with the same calibrated win-% the advisor
     # shows, and with the optimal completion of the draft behind that pick (so the user can
     # reveal the remaining placements). ``continuation`` is omitted when nothing remains.
-    known = sum(len(v) for v in body.request.settlements.values())
     for rec in result.ranking:
         rec.opening_win_prob = _win_prob(body.request, rec.placements)
-        try:
-            line = optimal_continuation(body.request, rec.placements)
-        except Exception:
-            line = None
-        if line is not None and len(line.user) + len(line.opponent) > known + len(rec.placements):
-            rec.continuation = line
+        _attach_continuation(body.request, rec)
     return result
 
 
